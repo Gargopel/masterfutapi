@@ -11,6 +11,7 @@ use App\Models\Country;
 use App\Models\League;
 use App\Models\MatchStatistic;
 use App\Models\Season;
+use App\Models\SiteSetting;
 use App\Models\Sport;
 use App\Models\SportsMatch;
 use App\Models\SyncSchedule;
@@ -509,6 +510,32 @@ class AdminApiController extends Controller
                 'last_sync_job' => SyncJob::where('api_provider_id', $provider->id)->latest()->first(),
             ];
         });
+    }
+
+    public function homepageSettings()
+    {
+        return SiteSetting::homepage();
+    }
+
+    public function updateHomepageSettings(Request $request)
+    {
+        $data = $request->validate([
+            'brand_name' => ['required', 'string', 'max:120'],
+            'nav_badge' => ['nullable', 'string', 'max:160'],
+            'hero_title' => ['required', 'string', 'max:180'],
+            'hero_subtitle' => ['required', 'string', 'max:500'],
+            'hero_image_url' => ['nullable', 'url', 'max:500'],
+            'primary_cta_label' => ['required', 'string', 'max:80'],
+            'primary_cta_url' => ['required', 'string', 'max:180'],
+            'secondary_cta_label' => ['required', 'string', 'max:80'],
+            'secondary_cta_url' => ['required', 'string', 'max:180'],
+            'accent_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'features' => ['required', 'array', 'size:3'],
+            'features.*.title' => ['required', 'string', 'max:80'],
+            'features.*.description' => ['required', 'string', 'max:220'],
+        ]);
+
+        return SiteSetting::updateHomepage($data);
     }
 
     public function entityIndex(string $entity)

@@ -157,4 +157,53 @@ class FutiaDataHubTest extends TestCase
         $this->assertDatabaseHas('api_providers', ['slug' => 'sportradar', 'status' => 'planned']);
         $this->assertDatabaseCount('users', 0);
     }
+
+    public function test_homepage_and_user_registration_work(): void
+    {
+        $this->seed();
+
+        $this->get('/')->assertOk()->assertSee('MasterFut API');
+
+        $this->post('/register', [
+            'name' => 'Api User',
+            'email' => 'api-user@test.dev',
+            'password' => 'strong-secret',
+            'password_confirmation' => 'strong-secret',
+        ])->assertRedirect('/dashboard');
+
+        $this->assertAuthenticated();
+        $this->assertDatabaseHas('users', ['email' => 'api-user@test.dev', 'is_admin' => false]);
+        $this->get('/dashboard')->assertOk()->assertSee('/api/v1/metadata');
+        $this->getJson('/admin/api/dashboard')->assertForbidden();
+    }
+
+    public function test_admin_can_update_homepage_settings(): void
+    {
+        $this->seed();
+        $admin = User::where('is_admin', true)->first();
+
+        $payload = [
+            'brand_name' => 'MasterFut Pro',
+            'nav_badge' => 'Live football data',
+            'hero_title' => 'A nova casa dos dados esportivos.',
+            'hero_subtitle' => 'API configuravel para produtos de futebol.',
+            'hero_image_url' => 'https://images.unsplash.com/photo-1556056504-5c7696c4c28d',
+            'primary_cta_label' => 'Entrar',
+            'primary_cta_url' => '/login',
+            'secondary_cta_label' => 'Metadata',
+            'secondary_cta_url' => '/api/v1/metadata',
+            'accent_color' => '#0f766e',
+            'features' => [
+                ['title' => 'Coleta', 'description' => 'Jobs de sincronizacao.'],
+                ['title' => 'API', 'description' => 'Endpoints publicos.'],
+                ['title' => 'Painel', 'description' => 'Operacao centralizada.'],
+            ],
+        ];
+
+        $this->actingAs($admin)->patchJson('/admin/api/homepage-settings', $payload)
+            ->assertOk()
+            ->assertJsonPath('brand_name', 'MasterFut Pro');
+
+        $this->get('/')->assertOk()->assertSee('MasterFut Pro')->assertSee('A nova casa dos dados esportivos.');
+    }
 }
