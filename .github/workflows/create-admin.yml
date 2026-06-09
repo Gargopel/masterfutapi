@@ -6,6 +6,9 @@ on:
 jobs:
   create-admin:
     runs-on: ubuntu-latest
+    env:
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
 
     steps:
       - name: Create admin on VPS via SSH
@@ -15,6 +18,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
+          envs: ADMIN_EMAIL,ADMIN_PASSWORD
           script: |
             set -e
 
