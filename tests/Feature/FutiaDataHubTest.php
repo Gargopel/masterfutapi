@@ -147,4 +147,14 @@ class FutiaDataHubTest extends TestCase
             'is_admin' => true,
         ]);
     }
+
+    public function test_provider_catalog_command_seeds_providers_without_users(): void
+    {
+        $this->artisan('futia:providers:seed')->assertSuccessful();
+
+        $this->assertDatabaseHas('api_providers', ['slug' => 'football-data']);
+        $this->assertDatabaseHas('api_providers', ['slug' => 'api-football']);
+        $this->assertDatabaseHas('api_providers', ['slug' => 'sportradar', 'status' => 'planned']);
+        $this->assertDatabaseCount('users', 0);
+    }
 }
