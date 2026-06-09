@@ -20,6 +20,10 @@ jobs:
           script: |
             set -e
 
+            export PATH="/www/server/nvm/versions/node/v24.14.0/bin:$PATH"
+            node -v
+            npm -v
+
             cd /www/wwwroot/masterfut.site
 
             git config --global --add safe.directory /www/wwwroot/masterfut.site
