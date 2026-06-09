@@ -32,6 +32,9 @@ Route::middleware(['auth', \App\Http\Middleware\EnsureAdmin::class])->group(func
     Route::get('/admin/api/system/queue-health', [AdminApiController::class, 'queueHealth']);
     Route::get('/admin/api/homepage-settings', [AdminApiController::class, 'homepageSettings']);
     Route::patch('/admin/api/homepage-settings', [AdminApiController::class, 'updateHomepageSettings']);
+    Route::get('/admin/api/users-overview', [AdminApiController::class, 'usersOverview']);
+    Route::get('/admin/api/user-api-tokens', [AdminApiController::class, 'userApiTokens']);
+    Route::get('/admin/api/user-api-usage', [AdminApiController::class, 'userApiUsage']);
     Route::get('/admin/api/alerts', [AdminApiController::class, 'alerts']);
     Route::post('/admin/api/alerts/{alert}/read', [AdminApiController::class, 'readAlert']);
     Route::post('/admin/api/alerts/{alert}/resolve', [AdminApiController::class, 'resolveAlert']);

@@ -53,4 +53,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(UserApiToken::class);
     }
+
+    public function apiRequestLogs(): HasMany
+    {
+        return $this->hasMany(UserApiRequestLog::class);
+    }
 }

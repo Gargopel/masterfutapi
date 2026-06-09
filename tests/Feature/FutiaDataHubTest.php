@@ -276,6 +276,40 @@ class FutiaDataHubTest extends TestCase
             ->assertJsonPath('message', 'Limite de 10 requisicoes por minuto atingido.');
     }
 
+    public function test_admin_can_see_users_keys_and_api_consumption(): void
+    {
+        $this->seed();
+        $admin = User::where('is_admin', true)->first();
+        $user = User::factory()->create(['name' => 'Client User', 'email' => 'client@test.dev', 'is_admin' => false]);
+        [$token, $plainTextToken] = UserApiToken::issueFor($user, 'Client production');
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/v1/metadata')
+            ->assertOk();
+
+        $this->assertDatabaseHas('user_api_request_logs', [
+            'user_id' => $user->id,
+            'user_api_token_id' => $token->id,
+            'endpoint' => '/api/v1/metadata',
+            'status_code' => 200,
+        ]);
+
+        $this->actingAs($admin)->getJson('/admin/api/users-overview')
+            ->assertOk()
+            ->assertJsonPath('cards.users_total', 2)
+            ->assertJsonFragment(['email' => 'client@test.dev']);
+
+        $this->actingAs($admin)->getJson('/admin/api/user-api-tokens')
+            ->assertOk()
+            ->assertJsonFragment(['name' => 'Client production'])
+            ->assertJsonFragment(['token_prefix' => $token->token_prefix]);
+
+        $this->actingAs($admin)->getJson('/admin/api/user-api-usage')
+            ->assertOk()
+            ->assertJsonPath('cards.requests', 1)
+            ->assertJsonFragment(['endpoint' => '/api/v1/metadata']);
+    }
+
     public function test_docs_page_and_profile_password_update_work(): void
     {
         $this->seed();

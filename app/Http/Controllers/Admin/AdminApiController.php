@@ -19,6 +19,9 @@ use App\Models\SystemAlert;
 use App\Models\SyncJob;
 use App\Models\SyncJobItem;
 use App\Models\Team;
+use App\Models\User;
+use App\Models\UserApiRequestLog;
+use App\Models\UserApiToken;
 use App\Services\SportsData\ProviderRegistry;
 use App\Services\SportsData\SportsDataSyncService;
 use App\Services\SportsData\SyncLockService;
@@ -122,6 +125,66 @@ class AdminApiController extends Controller
     public function providerKeys()
     {
         return ApiProviderKey::with('provider:id,name,slug')->latest()->get();
+    }
+
+    public function usersOverview(Request $request)
+    {
+        $today = now()->startOfDay();
+        $users = User::query()
+            ->withCount([
+                'apiTokens',
+                'apiTokens as active_api_tokens_count' => fn ($query) => $query->whereNull('revoked_at'),
+                'apiRequestLogs as requests_today_count' => fn ($query) => $query->where('requested_at', '>=', $today),
+                'apiRequestLogs as requests_total_count',
+            ])
+            ->when($request->filled('search'), fn ($query) => $query->where(fn ($nested) => $nested
+                ->where('name', 'like', '%'.$request->query('search').'%')
+                ->orWhere('email', 'like', '%'.$request->query('search').'%')))
+            ->latest()
+            ->paginate(25);
+
+        return [
+            'cards' => [
+                'users_total' => User::count(),
+                'users_with_active_keys' => User::whereHas('apiTokens', fn ($query) => $query->whereNull('revoked_at'))->count(),
+                'active_user_api_keys' => UserApiToken::whereNull('revoked_at')->count(),
+                'revoked_user_api_keys' => UserApiToken::whereNotNull('revoked_at')->count(),
+                'requests_today' => UserApiRequestLog::where('requested_at', '>=', $today)->count(),
+                'rate_limited_today' => UserApiRequestLog::where('requested_at', '>=', $today)->where('status_code', 429)->count(),
+            ],
+            'data' => $users,
+        ];
+    }
+
+    public function userApiTokens(Request $request)
+    {
+        return UserApiToken::query()
+            ->with('user:id,name,email')
+            ->withCount('requestLogs')
+            ->when($request->filled('user_id'), fn ($query) => $query->where('user_id', $request->integer('user_id')))
+            ->when($request->filled('status'), fn ($query) => $request->query('status') === 'active' ? $query->whereNull('revoked_at') : $query->whereNotNull('revoked_at'))
+            ->latest()
+            ->paginate(25);
+    }
+
+    public function userApiUsage(Request $request)
+    {
+        $logs = UserApiRequestLog::query()
+            ->with(['user:id,name,email', 'token:id,name,token_prefix'])
+            ->when($request->filled('user_id'), fn ($query) => $query->where('user_id', $request->integer('user_id')))
+            ->when($request->filled('status_code'), fn ($query) => $query->where('status_code', $request->integer('status_code')))
+            ->when($request->filled('endpoint'), fn ($query) => $query->where('endpoint', 'like', '%'.$request->query('endpoint').'%'))
+            ->latest('requested_at');
+
+        return [
+            'cards' => [
+                'requests' => (clone $logs)->count(),
+                'unique_users' => (clone $logs)->distinct('user_id')->count('user_id'),
+                'rate_limited' => (clone $logs)->where('status_code', 429)->count(),
+                'average_duration_ms' => round((float) (clone $logs)->avg('duration_ms'), 2),
+            ],
+            'data' => $logs->paginate(50),
+        ];
     }
 
     public function storeProviderKey(Request $request)

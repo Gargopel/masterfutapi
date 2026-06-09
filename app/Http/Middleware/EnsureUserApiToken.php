@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\UserApiToken;
+use App\Models\UserApiRequestLog;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -14,6 +15,7 @@ class EnsureUserApiToken
 
     public function handle(Request $request, Closure $next): Response
     {
+        $startedAt = microtime(true);
         $plainTextToken = $request->bearerToken() ?: $request->header('X-API-Key');
 
         if (! is_string($plainTextToken) || trim($plainTextToken) === '') {
@@ -37,6 +39,7 @@ class EnsureUserApiToken
 
         if (RateLimiter::tooManyAttempts($rateLimitKey, self::REQUESTS_PER_MINUTE)) {
             $retryAfter = RateLimiter::availableIn($rateLimitKey);
+            $this->logRequest($request, $token, 429, $startedAt);
 
             return response()->json([
                 'message' => 'Limite de 10 requisicoes por minuto atingido.',
@@ -57,7 +60,21 @@ class EnsureUserApiToken
         $response = $next($request);
         $response->headers->set('X-RateLimit-Limit', (string) self::REQUESTS_PER_MINUTE);
         $response->headers->set('X-RateLimit-Remaining', (string) RateLimiter::remaining($rateLimitKey, self::REQUESTS_PER_MINUTE));
+        $this->logRequest($request, $token, $response->getStatusCode(), $startedAt);
 
         return $response;
+    }
+
+    private function logRequest(Request $request, UserApiToken $token, int $statusCode, float $startedAt): void
+    {
+        UserApiRequestLog::create([
+            'user_id' => $token->user_id,
+            'user_api_token_id' => $token->id,
+            'method' => $request->method(),
+            'endpoint' => '/'.$request->path(),
+            'status_code' => $statusCode,
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'requested_at' => now(),
+        ]);
     }
 }
