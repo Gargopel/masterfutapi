@@ -265,6 +265,10 @@ abstract class AbstractSportsProvider implements SportsDataProviderInterface
             return 'SSL certificate validation failed. Check CA certificates on the server.';
         }
 
+        if (str_contains($e->getMessage(), 'cURL error 35')) {
+            return 'SSL/TLS handshake failed. Check server OpenSSL/cURL, CA certificates, outbound firewall, and IPv6 connectivity.';
+        }
+
         return $e->getMessage();
     }
 

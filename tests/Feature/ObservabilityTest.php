@@ -68,6 +68,27 @@ class ObservabilityTest extends TestCase
         $this->assertSame('100.00', (string) $job->fresh()->progress_percent);
     }
 
+    public function test_curl_error_35_gets_friendly_ssl_handshake_message(): void
+    {
+        $this->seed();
+        $provider = $this->activate('football-data');
+        Http::fake([
+            'api.football-data.org/v4/competitions' => Http::failedConnection('cURL error 35: OpenSSL SSL_connect: SSL_ERROR_SYSCALL'),
+        ]);
+
+        $job = SyncJob::create(['api_provider_id' => $provider->id, 'type' => 'sync_leagues', 'status' => 'pending']);
+        app(SportsDataSyncService::class)->run($job);
+
+        $message = 'SSL/TLS handshake failed. Check server OpenSSL/cURL, CA certificates, outbound firewall, and IPv6 connectivity.';
+        $this->assertSame('failed', $job->fresh()->status);
+        $this->assertSame($message, $job->fresh()->last_error);
+        $this->assertDatabaseHas('api_request_logs', [
+            'api_provider_id' => $provider->id,
+            'success' => false,
+            'error_message' => $message,
+        ]);
+    }
+
     public function test_rerun_and_cancel_behaviour(): void
     {
         $this->seed();
