@@ -1,9 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\V1\PublicSportsApiController;
+use App\Http\Middleware\EnsureUserApiToken;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('v1')->group(function () {
+Route::prefix('v1')->middleware(EnsureUserApiToken::class)->group(function () {
     Route::get('/metadata', [PublicSportsApiController::class, 'metadata']);
     Route::get('/sports', [PublicSportsApiController::class, 'sports']);
     Route::get('/countries', [PublicSportsApiController::class, 'countries']);

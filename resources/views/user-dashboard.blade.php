@@ -16,9 +16,9 @@
 
             <nav class="mt-8 grid gap-2 text-sm">
                 <a class="rounded bg-white/10 px-3 py-2 font-semibold" href="/dashboard">Dashboard</a>
+                <a class="rounded px-3 py-2 text-white/75 hover:bg-white/10 hover:text-white" href="/api-keys">API Keys</a>
                 <a class="rounded px-3 py-2 text-white/75 hover:bg-white/10 hover:text-white" href="/profile">Perfil</a>
                 <a class="rounded px-3 py-2 text-white/75 hover:bg-white/10 hover:text-white" href="/docs">Docs</a>
-                <a class="rounded px-3 py-2 text-white/75 hover:bg-white/10 hover:text-white" href="/api/v1/metadata">Metadata</a>
             </nav>
 
             <div class="mt-8 rounded border border-white/10 bg-white/5 p-4 text-sm text-white/75">
@@ -64,7 +64,7 @@
                             <h2 class="text-lg font-bold">Endpoint base</h2>
                             <p class="text-sm text-zinc-500">Use esta URL como raiz para todas as chamadas da API v1.</p>
                         </div>
-                        <a class="rounded border border-zinc-300 px-3 py-2 text-sm font-semibold hover:bg-zinc-50" href="/api/v1/metadata">Testar</a>
+                        <a class="rounded border border-zinc-300 px-3 py-2 text-sm font-semibold hover:bg-zinc-50" href="/api-keys">Gerar chave</a>
                     </div>
                     <code class="mt-4 block overflow-x-auto rounded bg-zinc-950 p-4 text-sm text-emerald-200">{{ url('/api/v1') }}</code>
                 </article>
@@ -90,7 +90,7 @@
                 </div>
                 <div class="mt-4 grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-3">
                     @foreach (['metadata', 'sports', 'countries', 'leagues', 'seasons', 'teams', 'matches', 'standings', 'stats/summary'] as $endpoint)
-                        <a class="rounded bg-zinc-100 px-3 py-2 font-mono hover:bg-emerald-50" href="/api/v1/{{ $endpoint }}">/api/v1/{{ $endpoint }}</a>
+                        <code class="rounded bg-zinc-100 px-3 py-2 font-mono">/api/v1/{{ $endpoint }}</code>
                     @endforeach
                 </div>
             </section>

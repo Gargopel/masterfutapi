@@ -16,9 +16,9 @@
 
             <nav class="mt-8 grid gap-2 text-sm">
                 <a class="rounded px-3 py-2 text-white/75 hover:bg-white/10 hover:text-white" href="/dashboard">Dashboard</a>
+                <a class="rounded px-3 py-2 text-white/75 hover:bg-white/10 hover:text-white" href="/api-keys">API Keys</a>
                 <a class="rounded bg-white/10 px-3 py-2 font-semibold" href="/profile">Perfil</a>
                 <a class="rounded px-3 py-2 text-white/75 hover:bg-white/10 hover:text-white" href="/docs">Docs</a>
-                <a class="rounded px-3 py-2 text-white/75 hover:bg-white/10 hover:text-white" href="/api/v1/metadata">Metadata</a>
             </nav>
 
             <div class="mt-8 rounded border border-white/10 bg-white/5 p-4 text-sm text-white/75">

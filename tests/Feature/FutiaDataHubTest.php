@@ -7,6 +7,7 @@ use App\Models\ApiProviderKey;
 use App\Models\ApiRequestLog;
 use App\Models\SyncJob;
 use App\Models\User;
+use App\Models\UserApiToken;
 use App\Services\SportsData\ProviderRateLimiter;
 use App\Services\SportsData\SyncProgressService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -98,8 +99,9 @@ class FutiaDataHubTest extends TestCase
     {
         $this->seed();
 
-        $this->getJson('/api/v1/sports')->assertOk()->assertJsonFragment(['slug' => 'football']);
-        $this->getJson('/api/v1/leagues')->assertOk()->assertJsonFragment(['slug' => 'brasileirao-serie-a']);
+        $this->getJson('/api/v1/sports')->assertUnauthorized();
+        $this->withHeaders($this->apiHeaders())->getJson('/api/v1/sports')->assertOk()->assertJsonFragment(['slug' => 'football']);
+        $this->withHeaders($this->apiHeaders())->getJson('/api/v1/leagues')->assertOk()->assertJsonFragment(['slug' => 'brasileirao-serie-a']);
     }
 
     public function test_rate_limiter_blocks_excess_requests(): void
@@ -181,9 +183,52 @@ class FutiaDataHubTest extends TestCase
         $this->get('/dashboard')
             ->assertOk()
             ->assertSee('Dashboard')
+            ->assertSee('API Keys')
             ->assertSee('Ligas')
             ->assertSee('/api/v1/metadata');
         $this->getJson('/admin/api/dashboard')->assertForbidden();
+    }
+
+    public function test_user_can_create_and_revoke_api_key(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+
+        $this->actingAs($user)->get('/api-keys')
+            ->assertOk()
+            ->assertSee('Gerar API key');
+
+        $this->actingAs($user)->post('/api-keys', [
+            'name' => 'Producao',
+        ])->assertRedirect('/api-keys');
+
+        $token = $user->apiTokens()->first();
+
+        $this->assertNotNull($token);
+        $this->assertDatabaseHas('user_api_tokens', [
+            'user_id' => $user->id,
+            'name' => 'Producao',
+            'revoked_at' => null,
+        ]);
+
+        $this->actingAs($user)->delete("/api-keys/{$token->id}")->assertRedirect();
+        $this->assertNotNull($token->fresh()->revoked_at);
+    }
+
+    public function test_revoked_api_key_cannot_access_public_api(): void
+    {
+        $this->seed();
+        $user = User::factory()->create(['is_admin' => false]);
+        [$token, $plainTextToken] = UserApiToken::issueFor($user, 'Revoked key');
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/v1/metadata')
+            ->assertOk();
+
+        $token->update(['revoked_at' => now()]);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/v1/metadata')
+            ->assertUnauthorized();
     }
 
     public function test_docs_page_and_profile_password_update_work(): void

@@ -120,7 +120,7 @@ class QueueExecutionTest extends TestCase
     public function test_metadata_includes_freshness(): void
     {
         $this->seed();
-        $this->getJson('/api/v1/metadata')
+        $this->withHeaders($this->apiHeaders())->getJson('/api/v1/metadata')
             ->assertOk()
             ->assertJsonStructure(['freshness' => ['last_successful_sync_at', 'last_data_refresh_at', 'running_updates_count']])
             ->assertJsonMissingPath('freshness.active_providers_count')

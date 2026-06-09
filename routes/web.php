@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminApiController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\PublicPageController;
+use App\Http\Controllers\UserApiTokenController;
 use App\Http\Controllers\UserAuthController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,6 +17,9 @@ Route::post('/logout', [UserAuthController::class, 'logout'])->middleware('auth'
 Route::get('/dashboard', [PublicPageController::class, 'dashboard'])->middleware('auth');
 Route::get('/profile', [PublicPageController::class, 'profile'])->middleware('auth');
 Route::post('/profile/password', [UserAuthController::class, 'updatePassword'])->middleware('auth');
+Route::get('/api-keys', [UserApiTokenController::class, 'index'])->middleware('auth');
+Route::post('/api-keys', [UserApiTokenController::class, 'store'])->middleware('auth');
+Route::delete('/api-keys/{token}', [UserApiTokenController::class, 'destroy'])->middleware('auth');
 
 Route::post('/admin/api/login', [AuthController::class, 'login'])->middleware('guest');
 
