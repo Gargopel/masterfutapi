@@ -1,0 +1,28 @@
+name: Create VPS Admin
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-admin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create admin on VPS via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+
+            export PATH="/www/server/nvm/versions/node/v24.14.0/bin:$PATH"
+
+            cd /www/wwwroot/masterfut.site
+
+            git config --global --add safe.directory /www/wwwroot/masterfut.site
+            git pull origin main
+
+            php artisan futia:admin:create

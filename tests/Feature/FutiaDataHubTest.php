@@ -132,4 +132,19 @@ class FutiaDataHubTest extends TestCase
         $this->assertStringContainsString('localStorage', $source);
         $this->assertStringContainsString("'zh'", $source);
     }
+
+    public function test_admin_create_command_creates_admin_user(): void
+    {
+        $this->artisan('futia:admin:create', [
+            '--email' => 'owner@test.dev',
+            '--password' => 'strong-secret',
+            '--name' => 'Owner',
+        ])->assertSuccessful();
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'owner@test.dev',
+            'name' => 'Owner',
+            'is_admin' => true,
+        ]);
+    }
 }
