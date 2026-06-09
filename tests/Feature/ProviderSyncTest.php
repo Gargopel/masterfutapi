@@ -140,7 +140,10 @@ class ProviderSyncTest extends TestCase
         ]);
         $this->getJson('/api/v1/matches?league_id='.$league->id.'&status=finished&date_from=2024-01-01&date_to=2024-12-31')
             ->assertOk()
-            ->assertJsonFragment(['id' => $match->id]);
+            ->assertJsonFragment(['id' => $match->id])
+            ->assertJsonMissingPath('data.0.provider')
+            ->assertJsonMissingPath('data.0.external_provider_id')
+            ->assertJsonMissingPath('data.0.external_id');
     }
 
     public function test_dashboard_reflects_collected_data(): void

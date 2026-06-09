@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ApiProvider;
 use App\Models\League;
 use App\Models\SiteSetting;
 use App\Models\SportsMatch;
@@ -17,7 +16,6 @@ class PublicPageController extends Controller
         return view('home', [
             'settings' => SiteSetting::homepage(),
             'stats' => [
-                'providers' => $this->countTable('api_providers', ApiProvider::class),
                 'leagues' => $this->countTable('leagues', League::class),
                 'teams' => $this->countTable('teams', Team::class),
                 'matches' => $this->countTable('sports_matches', SportsMatch::class),

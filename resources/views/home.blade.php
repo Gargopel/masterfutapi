@@ -60,7 +60,7 @@
                         <p class="text-sm font-semibold uppercase tracking-widest" style="color: {{ $settings['accent_color'] }}">Data products</p>
                         <h2 class="mt-2 text-3xl font-black md:text-5xl">Feita para operar dados esportivos de verdade.</h2>
                     </div>
-                    <a class="rounded border border-zinc-300 px-4 py-2 text-sm font-semibold hover:bg-zinc-100" href="/admin">Admin</a>
+                    <a class="rounded border border-zinc-300 px-4 py-2 text-sm font-semibold hover:bg-zinc-100" href="/register">Comecar agora</a>
                 </div>
                 <div class="grid gap-4 md:grid-cols-3">
                     @foreach ($settings['features'] as $feature)

@@ -162,7 +162,12 @@ class FutiaDataHubTest extends TestCase
     {
         $this->seed();
 
-        $this->get('/')->assertOk()->assertSee('MasterFut API');
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('MasterFut API')
+            ->assertDontSee('Multi-provider')
+            ->assertDontSee('Football-Data')
+            ->assertDontSee('API-Football');
 
         $this->post('/register', [
             'name' => 'Api User',
