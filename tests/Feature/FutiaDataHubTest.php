@@ -178,8 +178,47 @@ class FutiaDataHubTest extends TestCase
 
         $this->assertAuthenticated();
         $this->assertDatabaseHas('users', ['email' => 'api-user@test.dev', 'is_admin' => false]);
-        $this->get('/dashboard')->assertOk()->assertSee('/api/v1/metadata');
+        $this->get('/dashboard')
+            ->assertOk()
+            ->assertSee('Dashboard')
+            ->assertSee('Ligas')
+            ->assertSee('/api/v1/metadata');
         $this->getJson('/admin/api/dashboard')->assertForbidden();
+    }
+
+    public function test_docs_page_and_profile_password_update_work(): void
+    {
+        $this->seed();
+
+        $this->get('/docs')
+            ->assertOk()
+            ->assertSee('Documentacao v1')
+            ->assertSee('/matches')
+            ->assertSee('updated_since');
+
+        $user = User::factory()->create([
+            'password' => 'old-password',
+            'is_admin' => false,
+        ]);
+
+        $this->actingAs($user)->get('/profile')
+            ->assertOk()
+            ->assertSee('Alterar senha')
+            ->assertSee('Sair');
+
+        $this->actingAs($user)->post('/profile/password', [
+            'current_password' => 'wrong-password',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ])->assertSessionHasErrors('current_password');
+
+        $this->actingAs($user)->post('/profile/password', [
+            'current_password' => 'old-password',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertTrue(Hash::check('new-password', $user->fresh()->password));
     }
 
     public function test_admin_can_update_homepage_settings(): void

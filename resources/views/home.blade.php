@@ -18,7 +18,7 @@
                         <span class="text-lg font-semibold">{{ $settings['brand_name'] }}</span>
                     </a>
                     <nav class="flex items-center gap-3 text-sm">
-                        <a class="hidden rounded px-3 py-2 text-white/80 hover:text-white sm:inline-flex" href="/api/v1/metadata">API</a>
+                        <a class="hidden rounded px-3 py-2 text-white/80 hover:text-white sm:inline-flex" href="/docs">Docs</a>
                         <a class="rounded px-3 py-2 text-white/80 hover:text-white" href="/login">Login</a>
                         <a class="rounded bg-white px-4 py-2 font-semibold text-zinc-950 hover:bg-emerald-100" href="/register">Criar conta</a>
                     </nav>
