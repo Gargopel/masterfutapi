@@ -38,7 +38,7 @@
                 <div>
                     <p class="text-sm font-semibold text-emerald-700">Autenticacao</p>
                     <h1 class="mt-1 text-3xl font-black">API Keys</h1>
-                    <p class="mt-2 max-w-2xl text-zinc-600">Crie chaves para autenticar suas requisicoes na MasterFut API. Guarde o token com seguranca, ele aparece apenas uma vez.</p>
+                    <p class="mt-2 max-w-2xl text-zinc-600">Crie chaves para autenticar suas requisicoes na MasterFut API. O plano free permite 3 chaves ativas e 10 requisicoes por minuto.</p>
                 </div>
                 <a class="rounded border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-50" href="/docs">Ver docs</a>
             </header>
@@ -79,6 +79,7 @@
                         <p class="font-semibold text-zinc-950">Como autenticar</p>
                         <code class="mt-3 block overflow-x-auto rounded bg-white p-3">Authorization: Bearer sua_chave</code>
                         <code class="mt-2 block overflow-x-auto rounded bg-white p-3">X-API-Key: sua_chave</code>
+                        <p class="mt-3 text-xs">Chaves revogadas nao contam no limite de 3 chaves ativas.</p>
                     </div>
                 </article>
 

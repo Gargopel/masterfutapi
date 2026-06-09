@@ -12,6 +12,7 @@ use App\Services\SportsData\ProviderRateLimiter;
 use App\Services\SportsData\SyncProgressService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
 class FutiaDataHubTest extends TestCase
@@ -214,6 +215,29 @@ class FutiaDataHubTest extends TestCase
         $this->assertNotNull($token->fresh()->revoked_at);
     }
 
+    public function test_user_is_limited_to_three_active_api_keys(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+
+        foreach (range(1, 3) as $index) {
+            UserApiToken::issueFor($user, 'Key '.$index);
+        }
+
+        $this->actingAs($user)->post('/api-keys', [
+            'name' => 'Fourth key',
+        ])->assertSessionHasErrors('name');
+
+        $this->assertSame(3, $user->apiTokens()->whereNull('revoked_at')->count());
+
+        $user->apiTokens()->first()->update(['revoked_at' => now()]);
+
+        $this->actingAs($user)->post('/api-keys', [
+            'name' => 'Replacement key',
+        ])->assertRedirect('/api-keys');
+
+        $this->assertSame(3, $user->apiTokens()->whereNull('revoked_at')->count());
+    }
+
     public function test_revoked_api_key_cannot_access_public_api(): void
     {
         $this->seed();
@@ -229,6 +253,27 @@ class FutiaDataHubTest extends TestCase
         $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
             ->getJson('/api/v1/metadata')
             ->assertUnauthorized();
+    }
+
+    public function test_public_api_is_limited_to_ten_requests_per_minute_per_user(): void
+    {
+        $this->seed();
+        $user = User::factory()->create(['is_admin' => false]);
+        RateLimiter::clear('masterfut:user:'.$user->id);
+        [, $firstToken] = UserApiToken::issueFor($user, 'First key');
+        [, $secondToken] = UserApiToken::issueFor($user, 'Second key');
+
+        for ($attempt = 1; $attempt <= 10; $attempt++) {
+            $plainTextToken = $attempt % 2 === 0 ? $firstToken : $secondToken;
+            $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+                ->getJson('/api/v1/metadata')
+                ->assertOk();
+        }
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$firstToken])
+            ->getJson('/api/v1/metadata')
+            ->assertTooManyRequests()
+            ->assertJsonPath('message', 'Limite de 10 requisicoes por minuto atingido.');
     }
 
     public function test_docs_page_and_profile_password_update_work(): void

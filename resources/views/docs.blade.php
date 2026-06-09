@@ -60,6 +60,7 @@
                             <code class="mt-2 block overflow-x-auto rounded bg-white p-3 text-sm">X-API-Key: sua_chave</code>
                         </div>
                     </div>
+                    <p class="mt-4 text-sm text-zinc-600">No plano free, cada usuario pode manter ate 3 API keys ativas e realizar ate 10 requisicoes por minuto. O limite e aplicado por usuario, somando todas as chaves ativas.</p>
                     <a class="mt-5 inline-flex rounded bg-zinc-950 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800" href="/api-keys">Gerar API key</a>
                 </section>
 
@@ -152,6 +153,7 @@ Authorization: Bearer sua_chave</code></pre>
                     <div class="mt-4 grid gap-3 md:grid-cols-2">
                         <div class="rounded bg-zinc-100 p-4"><p class="font-bold">200</p><p class="mt-1 text-sm text-zinc-600">Requisicao processada com sucesso.</p></div>
                         <div class="rounded bg-zinc-100 p-4"><p class="font-bold">401</p><p class="mt-1 text-sm text-zinc-600">API key ausente, invalida ou revogada.</p></div>
+                        <div class="rounded bg-zinc-100 p-4"><p class="font-bold">429</p><p class="mt-1 text-sm text-zinc-600">Limite de requisicoes por minuto atingido.</p></div>
                         <div class="rounded bg-zinc-100 p-4"><p class="font-bold">404</p><p class="mt-1 text-sm text-zinc-600">Registro ou rota nao encontrada.</p></div>
                         <div class="rounded bg-zinc-100 p-4"><p class="font-bold">422</p><p class="mt-1 text-sm text-zinc-600">Parametro invalido.</p></div>
                         <div class="rounded bg-zinc-100 p-4"><p class="font-bold">500</p><p class="mt-1 text-sm text-zinc-600">Erro inesperado. Tente novamente ou contate suporte.</p></div>
