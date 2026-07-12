@@ -1,12 +1,14 @@
 name: Process VPS Sync Jobs
 
 on:
+  schedule:
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       limit:
         description: Number of pending sync jobs to process
         required: false
-        default: "5"
+        default: "1"
 
 jobs:
   process-sync-jobs:
@@ -30,4 +32,4 @@ jobs:
             git config --global --add safe.directory /www/wwwroot/masterfut.site
             git pull origin main
 
-            php artisan futia:sync:run --sync --limit=${{ github.event.inputs.limit }}
+            php artisan futia:sync:run --sync --limit=${{ github.event.inputs.limit || '1' }}

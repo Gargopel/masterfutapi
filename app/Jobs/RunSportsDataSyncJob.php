@@ -26,6 +26,11 @@ class RunSportsDataSyncJob implements ShouldQueue
             return;
         }
 
+        if ($job->status === 'pending' && $job->available_at && $job->available_at->isFuture()) {
+            $this->release(now()->diffInSeconds($job->available_at));
+            return;
+        }
+
         $lock = $locks->acquire($job);
         if (! $lock) {
             $job->update([

@@ -59,6 +59,8 @@ class AdminApiController extends Controller
                 'requests_today' => ApiRequestLog::where('requested_at', '>=', $today)->count(),
                 'errors_today' => ApiRequestLog::where('requested_at', '>=', $today)->where('success', false)->count(),
                 'pending_sync_jobs' => SyncJob::where('status', 'pending')->count(),
+                'ready_sync_jobs' => SyncJob::where('status', 'pending')->where(fn ($query) => $query->whereNull('available_at')->orWhere('available_at', '<=', now()))->count(),
+                'scheduled_sync_jobs' => SyncJob::where('status', 'pending')->where('available_at', '>', now())->count(),
                 'running_sync_jobs' => SyncJob::where('status', 'running')->count(),
                 'failed_sync_jobs' => SyncJob::where('status', 'failed')->count(),
                 'open_alerts' => SystemAlert::whereNull('resolved_at')->count(),

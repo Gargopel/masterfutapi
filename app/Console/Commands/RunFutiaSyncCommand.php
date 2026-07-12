@@ -20,7 +20,11 @@ class RunFutiaSyncCommand extends Command
             $this->info("Created {$created} scheduled sync job(s).");
         }
 
-        SyncJob::where('status', 'pending')->oldest()->limit((int) $this->option('limit'))->get()
+        SyncJob::where('status', 'pending')
+            ->where(fn ($query) => $query->whereNull('available_at')->orWhere('available_at', '<=', now()))
+            ->oldest()
+            ->limit((int) $this->option('limit'))
+            ->get()
             ->each(function (SyncJob $job) use ($service) {
                 try {
                     if ($this->option('sync')) {

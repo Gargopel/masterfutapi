@@ -57,15 +57,17 @@ class FullProviderSyncService
         ]);
 
         foreach ($children as $index => $scope) {
+            $availableAt = now()->addSeconds($index * $interval);
             $child = SyncJob::create($scope + [
                 'parent_sync_job_id' => $parent->id,
                 'api_provider_id' => $parent->api_provider_id,
                 'source' => 'full_provider_sync',
                 'status' => 'pending',
+                'available_at' => $availableAt,
                 'progress_percent' => 0,
             ]);
 
-            RunSportsDataSyncJob::dispatch($child->id)->delay(now()->addSeconds($index * $interval));
+            RunSportsDataSyncJob::dispatch($child->id)->delay($availableAt);
         }
 
         $parent->update([

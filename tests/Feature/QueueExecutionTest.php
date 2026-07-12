@@ -166,6 +166,9 @@ class QueueExecutionTest extends TestCase
         $this->assertSame('sync_leagues', $children[0]->type);
         $this->assertSame(FullProviderSyncService::TYPE, $children[1]->type);
         $this->assertSame('expand_after_leagues', $children[1]->config['phase']);
+        $this->assertNotNull($children[0]->available_at);
+        $this->assertNotNull($children[1]->available_at);
+        $this->assertTrue($children[1]->available_at->greaterThan($children[0]->available_at));
         $this->assertSame('completed', $parent->fresh()->status);
         Queue::assertPushed(RunSportsDataSyncJob::class, 2);
 
@@ -175,6 +178,26 @@ class QueueExecutionTest extends TestCase
         $this->assertSame($league->id, $matchChild->league_id);
         $this->assertSame('BSA', $matchChild->config['competition_code']);
         $this->assertSame(2026, $matchChild->config['season']);
+    }
+
+    public function test_sync_run_command_ignores_jobs_that_are_not_available_yet(): void
+    {
+        $this->seed();
+        $provider = $this->activate('api-football');
+        SyncJob::create([
+            'api_provider_id' => $provider->id,
+            'type' => 'sync_leagues',
+            'status' => 'pending',
+            'available_at' => now()->addHour(),
+        ]);
+
+        $this->artisan('futia:sync:run --sync --limit=1')->assertSuccessful();
+
+        $this->assertDatabaseHas('sync_jobs', [
+            'api_provider_id' => $provider->id,
+            'type' => 'sync_leagues',
+            'status' => 'pending',
+        ]);
     }
 
     public function test_metadata_includes_freshness(): void
