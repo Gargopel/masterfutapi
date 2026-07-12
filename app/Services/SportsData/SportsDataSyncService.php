@@ -7,7 +7,7 @@ use App\Services\SportsData\SystemAlertService;
 
 class SportsDataSyncService
 {
-    public function __construct(private ProviderRegistry $registry, private SystemAlertService $alerts) {}
+    public function __construct(private ProviderRegistry $registry, private SystemAlertService $alerts, private FullProviderSyncService $fullSync) {}
 
     public function run(SyncJob $job): SyncJob
     {
@@ -23,6 +23,7 @@ class SportsDataSyncService
         $adapter = $this->registry->make($job->provider);
 
         $result = match ($job->type) {
+            FullProviderSyncService::TYPE => new \App\Support\SportsData\SyncResult(true, 'Full sync planned.', $this->fullSync->plan($job)->result ?? []),
             'sync_leagues' => $adapter->syncLeagues($job),
             'sync_teams' => $adapter->syncTeams($job),
             'sync_matches' => $adapter->syncMatches($job),

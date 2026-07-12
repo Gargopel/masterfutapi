@@ -40,6 +40,7 @@ Route::middleware(['auth', \App\Http\Middleware\EnsureAdmin::class])->group(func
     Route::post('/admin/api/alerts/{alert}/resolve', [AdminApiController::class, 'resolveAlert']);
     Route::apiResource('/admin/api/providers', AdminApiController::class)->parameters(['providers' => 'provider'])->only(['index', 'store', 'update']);
     Route::post('/admin/api/providers/{provider}/test', [AdminApiController::class, 'testProvider']);
+    Route::post('/admin/api/providers/{provider}/full-sync', [AdminApiController::class, 'fullSyncProvider']);
     Route::get('/admin/api/provider-keys', [AdminApiController::class, 'providerKeys']);
     Route::post('/admin/api/provider-keys', [AdminApiController::class, 'storeProviderKey']);
     Route::patch('/admin/api/provider-keys/{key}', [AdminApiController::class, 'updateProviderKey']);

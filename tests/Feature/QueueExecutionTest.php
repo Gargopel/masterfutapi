@@ -8,6 +8,9 @@ use App\Models\ApiProviderKey;
 use App\Models\SyncJob;
 use App\Models\SyncSchedule;
 use App\Models\User;
+use App\Services\SportsData\FullProviderSyncService;
+use App\Services\SportsData\SportsDataNormalizer;
+use App\Services\SportsData\SportsDataSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
@@ -115,6 +118,63 @@ class QueueExecutionTest extends TestCase
         $this->actingAs($admin)->patchJson("/admin/api/schedules/{$id}", ['is_active' => false])->assertOk()->assertJsonPath('is_active', false);
         $this->actingAs($admin)->postJson("/admin/api/schedules/{$id}/run")->assertCreated();
         Queue::assertPushed(RunSportsDataSyncJob::class);
+    }
+
+    public function test_admin_can_schedule_full_provider_sync(): void
+    {
+        Queue::fake();
+        $this->seed();
+        $admin = User::where('is_admin', true)->first();
+        $provider = $this->activate('football-data');
+
+        $this->actingAs($admin)->postJson("/admin/api/providers/{$provider->id}/full-sync", [
+            'request_interval_seconds' => 60,
+            'seasons' => [2026],
+        ])->assertCreated()->assertJsonPath('type', FullProviderSyncService::TYPE);
+
+        $job = SyncJob::where('type', FullProviderSyncService::TYPE)->first();
+        $this->assertNotNull($job);
+        $this->assertSame(60, $job->config['request_interval_seconds']);
+        Queue::assertPushed(RunSportsDataSyncJob::class);
+    }
+
+    public function test_full_provider_sync_plans_children_with_interval(): void
+    {
+        Queue::fake();
+        $this->seed();
+        $provider = $this->activate('football-data');
+        $normalizer = app(SportsDataNormalizer::class);
+        $league = $normalizer->league($provider, [
+            'external_id' => '2013',
+            'name' => 'Campeonato Brasileiro Serie A',
+            'country' => $normalizer->country('Brazil', 'BRA'),
+            'type' => 'LEAGUE',
+            'raw_payload' => ['id' => 2013, 'code' => 'BSA', 'name' => 'Campeonato Brasileiro Serie A'],
+        ]);
+
+        $parent = SyncJob::create([
+            'api_provider_id' => $provider->id,
+            'type' => FullProviderSyncService::TYPE,
+            'status' => 'pending',
+            'config' => ['request_interval_seconds' => 60, 'seasons' => [2026]],
+        ]);
+
+        app(SportsDataSyncService::class)->run($parent);
+
+        $children = SyncJob::where('parent_sync_job_id', $parent->id)->orderBy('id')->get();
+        $this->assertCount(2, $children);
+        $this->assertSame('sync_leagues', $children[0]->type);
+        $this->assertSame(FullProviderSyncService::TYPE, $children[1]->type);
+        $this->assertSame('expand_after_leagues', $children[1]->config['phase']);
+        $this->assertSame('completed', $parent->fresh()->status);
+        Queue::assertPushed(RunSportsDataSyncJob::class, 2);
+
+        app(SportsDataSyncService::class)->run($children[1]);
+        $matchChild = SyncJob::where('parent_sync_job_id', $children[1]->id)->where('type', 'sync_matches')->first();
+        $this->assertNotNull($matchChild);
+        $this->assertSame($league->id, $matchChild->league_id);
+        $this->assertSame('BSA', $matchChild->config['competition_code']);
+        $this->assertSame(2026, $matchChild->config['season']);
     }
 
     public function test_metadata_includes_freshness(): void

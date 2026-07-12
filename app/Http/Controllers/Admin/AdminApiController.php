@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Models\UserApiRequestLog;
 use App\Models\UserApiToken;
 use App\Services\SportsData\ProviderRegistry;
+use App\Services\SportsData\FullProviderSyncService;
 use App\Services\SportsData\SportsDataSyncService;
 use App\Services\SportsData\SyncLockService;
 use App\Services\SportsData\SyncScheduleService;
@@ -120,6 +121,18 @@ class AdminApiController extends Controller
         $result = $registry->make($provider)->testConnection();
         $provider->update(['last_checked_at' => now(), 'last_error' => $result->success ? null : $result->message]);
         return ['success' => $result->success, 'message' => $result->message, 'meta' => $result->meta];
+    }
+
+    public function fullSyncProvider(Request $request, ApiProvider $provider, FullProviderSyncService $fullSync)
+    {
+        $data = $request->validate([
+            'request_interval_seconds' => ['nullable', 'integer', 'min:1', 'max:3600'],
+            'seasons' => ['nullable', 'array'],
+            'seasons.*' => ['integer', 'min:1900', 'max:2100'],
+            'max_children' => ['nullable', 'integer', 'min:1', 'max:5000'],
+        ]);
+
+        return response()->json($fullSync->create($provider, $data), 201);
     }
 
     public function providerKeys()

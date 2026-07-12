@@ -40,6 +40,18 @@ class FootballDataOrgProvider extends AbstractSportsProvider
                     'raw_payload' => $item,
                 ]);
 
+                if (data_get($item, 'currentSeason.startDate')) {
+                    $year = (int) substr((string) data_get($item, 'currentSeason.startDate'), 0, 4);
+                    $normalizer->season($this->provider, $league, $year, [
+                        'name' => (string) $year,
+                        'starts_at' => data_get($item, 'currentSeason.startDate'),
+                        'ends_at' => data_get($item, 'currentSeason.endDate'),
+                        'is_current' => true,
+                        'external_id' => (string) data_get($item, 'currentSeason.id', $year),
+                        'raw_payload' => data_get($item, 'currentSeason', []),
+                    ]);
+                }
+
                 $this->incrementProgress($job, $this->actionFor($league), 'league', (string) data_get($item, 'id'), $league->id, $item);
             }
 
