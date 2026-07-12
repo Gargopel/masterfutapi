@@ -67,7 +67,13 @@ function Dashboard({ t }: { t: (key: string) => string }) {
 }
 
 function Table({ rows, columns }: { rows: any[]; columns: string[] }) {
-  return <div className="overflow-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b dark:border-zinc-800">{columns.map(c => <th className="py-2" key={c}>{c}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr className="border-b border-zinc-100 dark:border-zinc-800" key={row.id ?? i}>{columns.map(c => <td className="py-2" key={c}>{typeof row[c] === 'boolean' ? String(row[c]) : String(row[c] ?? '-')}</td>)}</tr>)}</tbody></table></div>;
+  const valueFor = (row: any, column: string) => {
+    const value = row[column];
+    if (typeof value === 'boolean') return <Badge value={value ? 'active' : 'inactive'} />;
+    if (value && typeof value === 'object') return value.name ?? value.code ?? value.slug ?? '-';
+    return String(value ?? '-');
+  };
+  return <div className="overflow-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b dark:border-zinc-800">{columns.map(c => <th className="py-2" key={c}>{c}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr className="border-b border-zinc-100 dark:border-zinc-800" key={row.id ?? i}>{columns.map(c => <td className="py-2" key={c}>{valueFor(row, c)}</td>)}</tr>)}</tbody></table></div>;
 }
 
 function Providers({ t }: { t: (key: string) => string }) {
@@ -158,7 +164,15 @@ function EntityPage({ name }: { name: string }) {
   const [rows, setRows] = useState<any[]>();
   useEffect(() => { api<any>(`/admin/api/${name}`).then(r => setRows(r.data ?? r)); }, [name]);
   if (!rows) return <Loader />;
-  return <Card>{rows.length === 0 ? <Empty>No records found</Empty> : <Table rows={rows} columns={['id', 'name', 'status', 'updated_at']} />}</Card>;
+  const columnsByEntity: Record<string, string[]> = {
+    sports: ['id', 'name', 'slug', 'is_active', 'updated_at'],
+    countries: ['id', 'name', 'code', 'updated_at'],
+    leagues: ['id', 'name', 'slug', 'type', 'is_active', 'updated_at'],
+    seasons: ['id', 'name', 'year', 'league_id', 'updated_at'],
+    teams: ['id', 'name', 'short_name', 'slug', 'venue_name', 'is_active', 'updated_at'],
+    matches: ['id', 'starts_at', 'status', 'home_score', 'away_score', 'updated_at'],
+  };
+  return <Card>{rows.length === 0 ? <Empty>No records found</Empty> : <Table rows={rows} columns={columnsByEntity[name] ?? ['id', 'name', 'updated_at']} />}</Card>;
 }
 
 function SettingsPage({ t }: { t: (key: string) => string }) {
