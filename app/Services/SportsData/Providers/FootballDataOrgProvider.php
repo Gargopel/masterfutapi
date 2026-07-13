@@ -7,6 +7,7 @@ use App\Models\SyncJob;
 use App\Services\SportsData\SportsDataNormalizer;
 use App\Support\SportsData\ProviderTestResult;
 use App\Support\SportsData\SyncResult;
+use RuntimeException;
 
 class FootballDataOrgProvider extends AbstractSportsProvider
 {
@@ -72,7 +73,21 @@ class FootballDataOrgProvider extends AbstractSportsProvider
             $this->begin($job);
             $normalizer = app(SportsDataNormalizer::class);
             $sport = $normalizer->football();
-            $payload = $this->request('GET', "/competitions/{$competitionCode}/matches", array_filter(['season' => $seasonYear ?: null]), $this->authHeaders());
+            try {
+                $payload = $this->request('GET', "/competitions/{$competitionCode}/matches", array_filter(['season' => $seasonYear ?: null]), $this->authHeaders());
+            } catch (RuntimeException $e) {
+                if (str_contains($e->getMessage(), 'HTTP 404')) {
+                    $this->updateTotal($job, 0);
+                    return $this->complete($job->fresh(), [
+                        'imported' => 0,
+                        'skipped_reason' => 'Competition or season is not available on Football-Data.org.',
+                        'competition_code' => $competitionCode,
+                        'season' => $seasonYear ?: null,
+                    ]);
+                }
+
+                throw $e;
+            }
             $items = $payload['matches'] ?? [];
             $this->updateTotal($job, count($items));
 
@@ -80,8 +95,10 @@ class FootballDataOrgProvider extends AbstractSportsProvider
             $league = $this->resolveLeague($normalizer, $competition, (string) $competitionCode);
 
             foreach ($items as $item) {
-                $season = $normalizer->season($this->provider, $league, (int) ($seasonYear ?: data_get($item, 'season.startDate', now()->year)), [
-                    'name' => (string) ($seasonYear ?: data_get($item, 'season.startDate', now()->year)),
+                $seasonDate = data_get($item, 'season.startDate');
+                $resolvedSeasonYear = (int) ($seasonYear ?: ($seasonDate ? substr((string) $seasonDate, 0, 4) : now()->year));
+                $season = $normalizer->season($this->provider, $league, $resolvedSeasonYear, [
+                    'name' => (string) $resolvedSeasonYear,
                     'starts_at' => data_get($item, 'season.startDate'),
                     'ends_at' => data_get($item, 'season.endDate'),
                     'is_current' => data_get($item, 'season.currentMatchday') !== null,
@@ -90,6 +107,10 @@ class FootballDataOrgProvider extends AbstractSportsProvider
 
                 $home = $this->teamFromMatch($normalizer, $item, 'homeTeam', $sport);
                 $away = $this->teamFromMatch($normalizer, $item, 'awayTeam', $sport);
+                if (! $home || ! $away) {
+                    $this->recordItemFailure($job, 'Match skipped because one team is missing name/id.', 'match', (string) data_get($item, 'id'), $item);
+                    continue;
+                }
 
                 $match = $normalizer->match($this->provider, [
                     'sport' => $sport,
@@ -129,10 +150,16 @@ class FootballDataOrgProvider extends AbstractSportsProvider
 
     private function teamFromMatch(SportsDataNormalizer $normalizer, array $item, string $side, $sport)
     {
+        $name = data_get($item, "{$side}.name");
+        $externalId = data_get($item, "{$side}.id", $name);
+        if (! $name || ! $externalId) {
+            return null;
+        }
+
         return $normalizer->team($this->provider, [
             'sport' => $sport,
-            'external_id' => (string) data_get($item, "{$side}.id", data_get($item, "{$side}.name")),
-            'name' => data_get($item, "{$side}.name", 'Unknown team'),
+            'external_id' => (string) $externalId,
+            'name' => $name,
             'short_name' => data_get($item, "{$side}.shortName"),
             'logo_url' => data_get($item, "{$side}.crest"),
             'raw_payload' => data_get($item, $side, []),

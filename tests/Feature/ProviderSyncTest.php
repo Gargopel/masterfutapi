@@ -54,6 +54,35 @@ class ProviderSyncTest extends TestCase
         $this->assertGreaterThanOrEqual(2, ApiRequestLog::where('api_provider_id', $provider->id)->count());
     }
 
+    public function test_football_data_match_sync_skips_missing_teams_and_404_competitions(): void
+    {
+        $this->seed();
+        $provider = $this->activate('football-data');
+        Http::fake([
+            'api.football-data.org/v4/competitions/BAD/matches*' => Http::response(['message' => 'The resource you are looking for does not exist.', 'error' => 404], 404),
+            'api.football-data.org/v4/competitions/BSA/matches*' => Http::response(['competition' => ['id' => 2013, 'code' => 'BSA', 'name' => 'Campeonato Brasileiro Serie A'], 'matches' => [[
+                'id' => 9002,
+                'utcDate' => '2026-05-02T19:00:00Z',
+                'status' => 'FINISHED',
+                'season' => ['startDate' => '2026-01-01', 'endDate' => '2026-12-31'],
+                'homeTeam' => ['id' => null, 'name' => null],
+                'awayTeam' => ['id' => 2, 'name' => 'Palmeiras'],
+                'score' => ['fullTime' => ['home' => 0, 'away' => 1]],
+            ]]]),
+        ]);
+
+        $missing = SyncJob::create(['api_provider_id' => $provider->id, 'type' => 'sync_matches', 'status' => 'pending', 'config' => ['competition_code' => 'BAD', 'season' => 2026]]);
+        app(SportsDataSyncService::class)->run($missing);
+        $this->assertSame('completed', $missing->fresh()->status);
+        $this->assertSame('Competition or season is not available on Football-Data.org.', $missing->fresh()->result['skipped_reason']);
+
+        $partial = SyncJob::create(['api_provider_id' => $provider->id, 'type' => 'sync_matches', 'status' => 'pending', 'config' => ['competition_code' => 'BSA', 'season' => 2026]]);
+        app(SportsDataSyncService::class)->run($partial);
+        $this->assertSame('completed', $partial->fresh()->status);
+        $this->assertSame(1, $partial->fresh()->failed_items);
+        $this->assertDatabaseMissing('matches', ['external_provider_id' => $provider->id, 'external_id' => '9002']);
+    }
+
     public function test_api_football_syncs_leagues_teams_matches_standings_and_statistics(): void
     {
         $this->seed();
