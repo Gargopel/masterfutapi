@@ -13,20 +13,20 @@ class SiteSetting extends Model
     public static function homepageDefaults(): array
     {
         return [
-            'brand_name' => 'MasterFut API',
-            'nav_badge' => 'Sports data infrastructure',
-            'hero_title' => 'Dados de futebol prontos para produtos, dashboards e automacoes.',
-            'hero_subtitle' => 'Uma API esportiva unificada com historico de partidas, standings, times, ligas e atualizacoes confiaveis para produtos digitais.',
+            'brand_name' => 'FutAI',
+            'nav_badge' => 'Inteligencia esportiva conectada a dados reais',
+            'hero_title' => 'Analise futebol com dados confiaveis dentro do FutAI.',
+            'hero_subtitle' => 'O FutAI usa a MasterFut API nos bastidores para entregar ligas, times, partidas, classificacoes e contexto esportivo em uma experiencia simples para analise e tomada de decisao.',
             'hero_image_url' => 'https://images.unsplash.com/photo-1556056504-5c7696c4c28d?auto=format&fit=crop&w=1800&q=85',
-            'primary_cta_label' => 'Criar conta',
-            'primary_cta_url' => '/register',
-            'secondary_cta_label' => 'Ver endpoints',
-            'secondary_cta_url' => '/api/v1/metadata',
+            'primary_cta_label' => 'Conhecer o FutAI',
+            'primary_cta_url' => '#futai',
+            'secondary_cta_label' => 'Ver documentacao',
+            'secondary_cta_url' => '/docs',
             'accent_color' => '#16a34a',
             'features' => [
-                ['title' => 'Dados unificados', 'description' => 'Ligas, times, partidas, standings e estatisticas entregues por uma unica API MasterFut.'],
-                ['title' => 'Atualizacoes confiaveis', 'description' => 'Rotinas de coleta, monitoramento e consistencia operando nos bastidores para manter a base pronta.'],
-                ['title' => 'API publica v1', 'description' => 'Endpoints versionados para ligas, times, partidas, standings, estatisticas e metadata.'],
+                ['title' => 'Analise centralizada', 'description' => 'O app FutAI concentra leitura de jogos, clubes, ligas e contexto esportivo em um fluxo unico.'],
+                ['title' => 'Dados MasterFut nos bastidores', 'description' => 'A MasterFut API alimenta o app com uma base estruturada, monitorada e pronta para evoluir.'],
+                ['title' => 'Pronto para crescer', 'description' => 'A arquitetura separa produto, API, chaves e consumo para permitir planos, limites e novas integracoes.'],
             ],
         ];
     }
@@ -39,13 +39,27 @@ class SiteSetting extends Model
 
         $stored = static::where('key', 'homepage')->value('value') ?? [];
 
-        return array_replace_recursive(static::homepageDefaults(), is_array($stored) ? $stored : []);
+        $settings = array_replace_recursive(static::homepageDefaults(), is_array($stored) ? $stored : []);
+
+        return static::withoutPublicAuthCta($settings);
     }
 
     public static function updateHomepage(array $value): array
     {
         $settings = array_replace_recursive(static::homepage(), $value);
+        $settings = static::withoutPublicAuthCta($settings);
         static::updateOrCreate(['key' => 'homepage'], ['value' => $settings]);
+
+        return $settings;
+    }
+
+    private static function withoutPublicAuthCta(array $settings): array
+    {
+        if (in_array($settings['primary_cta_url'] ?? '', ['/register', '/login'], true)) {
+            $defaults = static::homepageDefaults();
+            $settings['primary_cta_label'] = $defaults['primary_cta_label'];
+            $settings['primary_cta_url'] = $defaults['primary_cta_url'];
+        }
 
         return $settings;
     }

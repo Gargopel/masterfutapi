@@ -161,33 +161,25 @@ class FutiaDataHubTest extends TestCase
         $this->assertDatabaseCount('users', 0);
     }
 
-    public function test_homepage_and_user_registration_work(): void
+    public function test_homepage_focuses_futai_and_hides_public_user_auth(): void
     {
         $this->seed();
 
         $this->get('/')
             ->assertOk()
-            ->assertSee('MasterFut API')
+            ->assertSee('FutAI')
+            ->assertSee('Cadastro e login dos usuarios serao feitos diretamente no app FutAI')
+            ->assertSee('/docs')
+            ->assertDontSee('/login')
+            ->assertDontSee('/register')
+            ->assertDontSee('Criar conta')
             ->assertDontSee('Multi-provider')
             ->assertDontSee('Football-Data')
             ->assertDontSee('API-Football');
 
-        $this->post('/register', [
-            'name' => 'Api User',
-            'email' => 'api-user@test.dev',
-            'password' => 'strong-secret',
-            'password_confirmation' => 'strong-secret',
-        ])->assertRedirect('/dashboard');
-
-        $this->assertAuthenticated();
-        $this->assertDatabaseHas('users', ['email' => 'api-user@test.dev', 'is_admin' => false]);
-        $this->get('/dashboard')
-            ->assertOk()
-            ->assertSee('Dashboard')
-            ->assertSee('API Keys')
-            ->assertSee('Ligas')
-            ->assertSee('/api/v1/metadata');
-        $this->getJson('/admin/api/dashboard')->assertForbidden();
+        $this->get('/login')->assertRedirect('/');
+        $this->get('/register')->assertRedirect('/');
+        $this->getJson('/admin/api/dashboard')->assertUnauthorized();
     }
 
     public function test_user_can_create_and_revoke_api_key(): void
@@ -370,7 +362,9 @@ class FutiaDataHubTest extends TestCase
 
         $this->actingAs($admin)->patchJson('/admin/api/homepage-settings', $payload)
             ->assertOk()
-            ->assertJsonPath('brand_name', 'MasterFut Pro');
+            ->assertJsonPath('brand_name', 'MasterFut Pro')
+            ->assertJsonPath('primary_cta_label', 'Conhecer o FutAI')
+            ->assertJsonPath('primary_cta_url', '#futai');
 
         $this->get('/')->assertOk()->assertSee('MasterFut Pro')->assertSee('A nova casa dos dados esportivos.');
     }

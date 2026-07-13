@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PublicPageController::class, 'home']);
 Route::get('/docs', [PublicPageController::class, 'docs']);
-Route::get('/login', [UserAuthController::class, 'showLogin'])->middleware('guest')->name('login');
+Route::get('/login', fn () => redirect('/'))->middleware('guest')->name('login');
 Route::post('/login', [UserAuthController::class, 'login'])->middleware('guest');
-Route::get('/register', [UserAuthController::class, 'showRegister'])->middleware('guest')->name('register');
+Route::get('/register', fn () => redirect('/'))->middleware('guest')->name('register');
 Route::post('/register', [UserAuthController::class, 'register'])->middleware('guest');
 Route::post('/logout', [UserAuthController::class, 'logout'])->middleware('auth');
 Route::get('/dashboard', [PublicPageController::class, 'dashboard'])->middleware('auth');
