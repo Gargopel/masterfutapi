@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, ArrowLeft, Copy, Database, Eye, Globe2, KeyRound, Languages, LayoutDashboard, Link as LinkIcon, ListChecks, LogOut, Moon, Play, RefreshCw, Server, Shield, Sun, Table2, Users, XCircle } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowLeft, BarChart3, CheckCircle2, Clock3, Copy, Database, Eye, Globe2, KeyRound, Languages, LayoutDashboard, Link as LinkIcon, ListChecks, LogOut, Moon, Play, RefreshCw, Server, Shield, Sun, Table2, Users, XCircle, type LucideIcon } from 'lucide-react';
 import './bootstrap';
 
 type Locale = 'pt-BR' | 'en' | 'es' | 'zh';
@@ -19,9 +19,12 @@ const messages: Record<Locale, Record<string, string>> = {
   zh: { dashboard: '仪表板', sports: '运动', countries: '国家', leagues: '联赛', seasons: '赛季', teams: '球队', matches: '比赛', providers: '供应商', keys: 'API Keys', sync: '同步任务', logs: '请求日志', settings: '设置', login: '登录', password: '密码', email: '邮箱', active: '启用', inactive: '停用', planned: '计划中', progress: '进度', recent: '最近同步', test: '测试', run: '运行', rerun: '重新运行', cancel: '取消', back: '返回', copy: '复制', logout: '退出', docs: '文档', website: '网站', baseUrl: 'Base URL', save: '保存', createKey: '创建 Key', createSync: '创建任务', jobDetail: '任务详情', requestLogs: '外部请求', syncItems: '同步项目', coverage: '覆盖率', providerHealth: '供应商健康', emptyJobs: '没有同步任务', emptyLogs: '没有日志', emptyErrors: '没有错误记录' },
 };
 
-const pages = [
-  ['dashboard', LayoutDashboard], ['users', Users], ['sports', Activity], ['countries', Globe2], ['leagues', Table2], ['seasons', ListChecks], ['teams', Shield], ['matches', Database], ['providers', Server], ['keys', KeyRound], ['sync', RefreshCw], ['schedules', ListChecks], ['logs', ListChecks], ['settings', Languages],
-] as const;
+type NavItem = [string, LucideIcon];
+const navGroups: { label: string; items: NavItem[] }[] = [
+  { label: 'Operacao', items: [['dashboard', LayoutDashboard], ['providers', Server], ['sync', RefreshCw], ['schedules', Clock3], ['logs', ListChecks]] },
+  { label: 'Produto', items: [['users', Users], ['keys', KeyRound], ['settings', Languages]] },
+  { label: 'Dados', items: [['sports', Activity], ['countries', Globe2], ['leagues', Table2], ['seasons', ListChecks], ['teams', Shield], ['matches', Database]] },
+];
 
 const csrf = () => decodeURIComponent(document.cookie.split('; ').find(cookie => cookie.startsWith('XSRF-TOKEN='))?.split('=')[1] ?? document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '');
 async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -30,14 +33,79 @@ async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   return response.json();
 }
 const qs = (params: Record<string, string>) => new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '')).toString();
+const labelFor = (key: string) => ({
+  active_providers: 'Providers ativos',
+  active_api_keys: 'Chaves internas ativas',
+  collected_leagues: 'Ligas coletadas',
+  collected_teams: 'Times coletados',
+  collected_matches: 'Partidas coletadas',
+  finished_matches: 'Partidas finalizadas',
+  future_matches: 'Partidas futuras',
+  collected_statistics: 'Estatisticas coletadas',
+  requests_today: 'Requests hoje',
+  errors_today: 'Erros hoje',
+  pending_sync_jobs: 'Jobs pendentes',
+  ready_sync_jobs: 'Jobs prontos',
+  scheduled_sync_jobs: 'Jobs agendados',
+  running_sync_jobs: 'Jobs rodando',
+  failed_sync_jobs: 'Jobs com falha',
+  open_alerts: 'Alertas abertos',
+  status_429_today: 'Rate limits hoje',
+  cancelled_jobs: 'Jobs cancelados',
+  active_schedules: 'Agendamentos ativos',
+  users_total: 'Usuarios',
+  users_with_active_keys: 'Usuarios com chave',
+  active_user_api_keys: 'Chaves de clientes ativas',
+  revoked_user_api_keys: 'Chaves revogadas',
+  rate_limited_today: 'Bloqueios hoje',
+}[key] ?? key.replace(/_/g, ' '));
+const descriptionFor = (key: string) => ({
+  active_providers: 'Fontes internas habilitadas para coleta.',
+  collected_matches: 'Volume total disponivel para a API.',
+  requests_today: 'Chamadas externas e operacionais no dia.',
+  errors_today: 'Falhas registradas desde 00:00.',
+  ready_sync_jobs: 'Pendentes que podem rodar agora.',
+  scheduled_sync_jobs: 'Aguardando janela de execucao.',
+  running_sync_jobs: 'Processamentos em andamento.',
+  failed_sync_jobs: 'Precisam de revisao operacional.',
+  open_alerts: 'Eventos que pedem atencao.',
+}[key] ?? '');
+const pageTitle = (id: string, t: (key: string) => string) => ({
+  dashboard: 'Centro de controle',
+  users: 'Usuarios e consumo',
+  providers: 'Providers internos',
+  keys: 'Chaves dos providers',
+  sync: 'Sync jobs',
+  schedules: 'Agendamentos',
+  logs: 'Logs externos',
+  settings: 'Configuracoes da homepage',
+}[id] ?? t(id));
+const pageSubtitle = (id: string) => ({
+  dashboard: 'Saude da operacao, fila, coleta de dados e alertas em um unico lugar.',
+  users: 'Acompanhe clientes, API keys e consumo da MasterFut API.',
+  providers: 'Gerencie as fontes internas de dados e dispare coletas completas.',
+  keys: 'Controle as credenciais usadas nos providers externos.',
+  sync: 'Crie, acompanhe e reexecute coletas de dados esportivos.',
+  schedules: 'Automatize rotinas recorrentes de sincronizacao.',
+  logs: 'Audite chamadas feitas aos providers internos.',
+  settings: 'Edite textos, imagem e CTAs da pagina publica.',
+}[id] ?? 'Dados operacionais da MasterFut.');
 
 function Badge({ value }: { value: string }) {
   const tone = ['active', 'completed', 'created'].includes(value) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : ['planned', 'running', 'updated', 'pending'].includes(value) ? 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300' : ['failed', 'error', 'cancelled'].includes(value) ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' : value === 'skipped' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
   return <span className={`inline-flex rounded px-2 py-1 text-xs font-medium ${tone}`}>{value}</span>;
 }
-function Card({ children, className = '' }: React.PropsWithChildren<{ className?: string }>) { return <div className={`rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${className}`}>{children}</div>; }
+function Card({ children, className = '' }: React.PropsWithChildren<{ className?: string }>) { return <div className={`rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${className}`}>{children}</div>; }
 function Loader() { return <div className="grid min-h-32 place-items-center"><RefreshCw className="h-5 w-5 animate-spin text-zinc-400" /></div>; }
 function Empty({ children }: React.PropsWithChildren) { return <p className="rounded border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">{children}</p>; }
+function StatCard({ label, value, description, tone = 'neutral', icon: Icon = BarChart3 }: { label: string; value: unknown; description?: string; tone?: 'neutral' | 'good' | 'warn' | 'bad'; icon?: React.ComponentType<{ className?: string }> }) {
+  const toneClass = tone === 'good' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : tone === 'warn' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : tone === 'bad' ? 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300' : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
+  return <Card><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{label}</p><p className="mt-2 text-3xl font-semibold tracking-normal">{String(value ?? 0)}</p>{description && <p className="mt-2 text-xs leading-5 text-zinc-500">{description}</p>}</div><span className={`grid h-10 w-10 shrink-0 place-items-center rounded ${toneClass}`}><Icon className="h-5 w-5" /></span></div></Card>;
+}
+function MiniStat({ label, value, tone = 'neutral', icon: Icon = BarChart3 }: { label: string; value: unknown; tone?: 'neutral' | 'good' | 'warn' | 'bad'; icon?: React.ComponentType<{ className?: string }> }) {
+  const toneClass = tone === 'good' ? 'text-emerald-600' : tone === 'warn' ? 'text-amber-600' : tone === 'bad' ? 'text-rose-600' : 'text-sky-600';
+  return <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800"><div className="flex items-center justify-between gap-3"><p className="text-xs font-medium text-zinc-500">{label}</p><Icon className={`h-4 w-4 ${toneClass}`} /></div><p className="mt-2 text-xl font-semibold">{String(value ?? 0)}</p></div>;
+}
 function JsonBlock({ value, t }: { value: unknown; t: (key: string) => string }) {
   const text = JSON.stringify(value ?? {}, null, 2);
   return <div><button className="mb-2 inline-flex items-center gap-1 rounded border px-2 py-1 text-xs dark:border-zinc-700" onClick={() => navigator.clipboard?.writeText(text)}><Copy className="h-3 w-3" />{t('copy')}</button><pre className="max-h-80 overflow-auto rounded bg-zinc-100 p-3 text-xs dark:bg-zinc-800">{text}</pre></div>;
@@ -56,13 +124,28 @@ function Dashboard({ t }: { t: (key: string) => string }) {
   const [coverage, setCoverage] = useState<any>();
   useEffect(() => { api('/admin/api/dashboard').then(setData); api<any[]>('/admin/api/providers/health').then(setHealth); api('/admin/api/data-coverage').then(setCoverage); }, []);
   if (!data) return <Loader />;
+  const cards = data.cards ?? {};
+  const primary = [
+    ['active_providers', cards.active_providers, 'good', Server],
+    ['collected_matches', cards.collected_matches, 'neutral', Database],
+    ['requests_today', cards.requests_today, 'neutral', BarChart3],
+    ['errors_today', cards.errors_today, Number(cards.errors_today) > 0 ? 'bad' : 'good', AlertTriangle],
+  ] as const;
+  const queue = [
+    ['ready_sync_jobs', cards.ready_sync_jobs, 'good', CheckCircle2],
+    ['scheduled_sync_jobs', cards.scheduled_sync_jobs, 'warn', Clock3],
+    ['running_sync_jobs', cards.running_sync_jobs, 'neutral', RefreshCw],
+    ['failed_sync_jobs', cards.failed_sync_jobs, Number(cards.failed_sync_jobs) > 0 ? 'bad' : 'neutral', XCircle],
+  ] as const;
   return <div className="space-y-4">
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(data.cards ?? {}).map(([key, value]) => <Card key={key}><p className="text-sm text-zinc-500">{key.replace(/_/g, ' ')}</p><p className="mt-2 text-2xl font-semibold">{String(value)}</p></Card>)}</div>
-    <Card><div className="flex items-center justify-between"><h2 className="font-semibold">{t('progress')}</h2><span>{data.overall_progress ?? 0}%</span></div><div className="mt-3 h-2 rounded bg-zinc-100 dark:bg-zinc-800"><div className="h-2 rounded bg-emerald-500" style={{ width: `${data.overall_progress ?? 0}%` }} /></div></Card>
-    {(data.alerts ?? []).length > 0 && <Card><h2 className="mb-3 font-semibold">Alerts</h2><div className="space-y-2">{data.alerts.map((alert: any) => <div className="flex items-center justify-between rounded border p-3 text-sm dark:border-zinc-800" key={alert.id}><span>{alert.title}</span><Badge value={alert.severity} /></div>)}</div></Card>}
-    <Card><h2 className="mb-3 font-semibold">Queue Worker</h2><div className="grid gap-3 md:grid-cols-5"><div><p className="text-xs text-zinc-500">Connection</p><p className="font-semibold">{data.queue_health?.queue_connection}</p></div><div><p className="text-xs text-zinc-500">Pending</p><p className="font-semibold">{data.queue_health?.pending_jobs_count ?? 0}</p></div><div><p className="text-xs text-zinc-500">Running</p><p className="font-semibold">{data.queue_health?.running_sync_jobs_count ?? 0}</p></div><div><p className="text-xs text-zinc-500">Stale</p><p className="font-semibold">{data.queue_health?.stale_running_jobs_count ?? 0}</p></div><div><p className="text-xs text-zinc-500">Failed</p><p className="font-semibold">{data.queue_health?.failed_jobs_count ?? 0}</p></div></div><p className="mt-3 text-sm text-zinc-500">{data.queue_health?.recommendation}</p></Card>
-    <Card><h2 className="mb-3 font-semibold">{t('providerHealth')}</h2>{health.length === 0 ? <Empty>{t('emptyErrors')}</Empty> : <Table rows={health} columns={['name', 'status', 'active_keys_count', 'requests_today', 'errors_today', 'rate_limit_hits_today', 'average_response_time_ms']} />}</Card>
-    <Card><h2 className="mb-3 font-semibold">{t('coverage')}</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{Object.entries(coverage?.summary ?? {}).map(([key, value]) => <div key={key}><p className="text-xs text-zinc-500">{key}</p><p className="text-xl font-semibold">{String(value)}</p></div>)}</div><div className="mt-4 overflow-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b dark:border-zinc-800"><th className="py-2">League</th><th>Season</th><th>Matches</th><th>Finished</th><th>Scheduled</th><th>Stats</th><th>Last sync</th></tr></thead><tbody>{(coverage?.rows ?? []).map((row: any, index: number) => <tr className="border-b border-zinc-100 dark:border-zinc-800" key={index}><td className="py-2">{row.league?.name}</td><td>{row.season?.year}</td><td>{row.matches_total}</td><td>{row.matches_finished}</td><td>{row.matches_scheduled}</td><td>{row.statistics_count}</td><td>{row.last_synced_at ?? '-'}</td></tr>)}</tbody></table></div></Card>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{primary.map(([key, value, tone, Icon]) => <StatCard key={key} label={labelFor(key)} value={value} description={descriptionFor(key)} tone={tone} icon={Icon} />)}</div>
+    <div className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
+      <Card><div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Fila e processamento</h2><p className="text-sm text-zinc-500">Estado atual dos jobs e do worker.</p></div><Badge value={data.queue_health?.queue_connection ?? 'database'} /></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{queue.map(([key, value, tone, Icon]) => <MiniStat key={key} label={labelFor(key)} value={value} tone={tone} icon={Icon} />)}</div><p className="mt-4 rounded bg-zinc-100 px-3 py-2 text-sm text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{data.queue_health?.recommendation}</p></Card>
+      <Card><div className="flex items-center justify-between"><div><h2 className="text-lg font-semibold">Progresso geral</h2><p className="text-sm text-zinc-500">Itens processados nos jobs ativos/concluidos.</p></div><span className="text-2xl font-semibold">{data.overall_progress ?? 0}%</span></div><div className="mt-5 h-3 rounded bg-zinc-100 dark:bg-zinc-800"><div className="h-3 rounded bg-emerald-500" style={{ width: `${data.overall_progress ?? 0}%` }} /></div><div className="mt-5 grid grid-cols-2 gap-3 text-sm"><div><p className="text-zinc-500">Pendentes</p><p className="font-semibold">{cards.pending_sync_jobs ?? 0}</p></div><div><p className="text-zinc-500">Alertas</p><p className="font-semibold">{cards.open_alerts ?? 0}</p></div><div><p className="text-zinc-500">Rate limit</p><p className="font-semibold">{cards.status_429_today ?? 0}</p></div><div><p className="text-zinc-500">Schedules</p><p className="font-semibold">{cards.active_schedules ?? 0}</p></div></div></Card>
+    </div>
+    {(data.alerts ?? []).length > 0 && <Card><h2 className="mb-3 text-lg font-semibold">Alertas recentes</h2><div className="space-y-2">{data.alerts.map((alert: any) => <div className="flex items-center justify-between rounded border border-zinc-200 p-3 text-sm dark:border-zinc-800" key={alert.id}><span className="font-medium">{alert.title}</span><Badge value={alert.severity} /></div>)}</div></Card>}
+    <Card><div className="mb-4"><h2 className="text-lg font-semibold">{t('providerHealth')}</h2><p className="text-sm text-zinc-500">Latencia, erros e limites dos providers internos.</p></div>{health.length === 0 ? <Empty>{t('emptyErrors')}</Empty> : <Table rows={health} columns={['name', 'status', 'active_keys_count', 'requests_today', 'errors_today', 'rate_limit_hits_today', 'average_response_time_ms']} />}</Card>
+    <Card><div className="mb-4"><h2 className="text-lg font-semibold">{t('coverage')}</h2><p className="text-sm text-zinc-500">Resumo da base esportiva disponivel na API.</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{Object.entries(coverage?.summary ?? {}).map(([key, value]) => <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800" key={key}><p className="text-xs text-zinc-500">{labelFor(key)}</p><p className="text-xl font-semibold">{String(value)}</p></div>)}</div><div className="mt-4 overflow-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b dark:border-zinc-800"><th className="py-2">Liga</th><th>Temporada</th><th>Partidas</th><th>Finalizadas</th><th>Agendadas</th><th>Stats</th><th>Ultimo sync</th></tr></thead><tbody>{(coverage?.rows ?? []).map((row: any, index: number) => <tr className="border-b border-zinc-100 dark:border-zinc-800" key={index}><td className="py-2 font-medium">{row.league?.name}</td><td>{row.season?.year}</td><td>{row.matches_total}</td><td>{row.matches_finished}</td><td>{row.matches_scheduled}</td><td>{row.statistics_count}</td><td>{row.last_synced_at ?? '-'}</td></tr>)}</tbody></table></div></Card>
   </div>;
 }
 
@@ -93,7 +176,7 @@ function Keys({ t }: { t: (key: string) => string }) {
   return <div className="space-y-4"><Card><h2 className="mb-3 font-semibold">{t('createKey')}</h2><form className="grid gap-3 md:grid-cols-4" onSubmit={async e => { e.preventDefault(); await api('/admin/api/provider-keys', { method: 'POST', body: JSON.stringify({ ...form, api_provider_id: Number(form.api_provider_id) }) }); setForm({ api_provider_id: '', name: '', api_key: '' }); load(); }}><select className="rounded border bg-transparent px-3 py-2 dark:border-zinc-700" value={form.api_provider_id} onChange={e => setForm({ ...form, api_provider_id: e.target.value })}><option value="">Provider</option>{providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><input className="rounded border bg-transparent px-3 py-2 dark:border-zinc-700" placeholder="Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /><input className="rounded border bg-transparent px-3 py-2 dark:border-zinc-700" placeholder="API key" value={form.api_key} onChange={e => setForm({ ...form, api_key: e.target.value })} /><button className="rounded bg-emerald-600 px-3 py-2 text-white">{t('save')}</button></form></Card><div className="grid gap-3 lg:grid-cols-2">{keys.map(key => <Card key={key.id}><div className="flex justify-between"><div><h3 className="font-semibold">{key.name}</h3><p className="text-sm text-zinc-500">{key.provider?.name} - {key.key_hint}</p></div><Badge value={key.is_active ? 'active' : 'inactive'} /></div></Card>)}</div></div>;
 }
 
-function SyncJobs({ t, openJob }: { t: (key: string) => string; openJob: (id: number) => void }) {
+function SyncJobs({ t, openJob }: { t: (key: string) => string; openJob: (id: number | null) => void }) {
   const [jobs, setJobs] = useState<SyncJob[]>();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [form, setForm] = useState({ api_provider_id: '', type: 'sync_leagues', config: '{}', is_incremental: false });
@@ -128,7 +211,7 @@ function Logs({ t }: { t: (key: string) => string }) {
   return <div className="space-y-4"><a className="inline-flex rounded border px-3 py-2 text-sm dark:border-zinc-700" href={`/admin/api/request-logs/export?${qs(filters)}`}>Export CSV</a><Card><div className="grid gap-3 md:grid-cols-6">{Object.entries(filters).map(([key, value]) => <input key={key} className="rounded border bg-transparent px-3 py-2 text-sm dark:border-zinc-700" placeholder={key} value={value} onChange={e => setFilters({ ...filters, [key]: e.target.value })} />)}<button className="rounded bg-emerald-600 px-3 py-2 text-white" onClick={load}>Filter</button></div></Card>{!data ? <Loader /> : <><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">{Object.entries(data.cards ?? {}).map(([key, value]) => <Card key={key}><p className="text-xs text-zinc-500">{key}</p><p className="mt-1 text-lg font-semibold">{String(value ?? '-')}</p></Card>)}</div><Card><RequestLogTable rows={data.data?.data ?? []} t={t} /></Card></>}</div>;
 }
 
-function Schedules({ t, openJob }: { t: (key: string) => string; openJob: (id: number) => void }) {
+function Schedules({ t, openJob }: { t: (key: string) => string; openJob: (id: number | null) => void }) {
   const [data, setData] = useState<any>();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [form, setForm] = useState({ name: '', api_provider_id: '', type: 'sync_matches', frequency: 'daily', config: '{\n  "league_id": 71,\n  "season": 2024,\n  "timezone": "America/Sao_Paulo",\n  "max_pages": 10\n}', is_active: true });
@@ -210,6 +293,47 @@ function SettingsPage({ t }: { t: (key: string) => string }) {
   </div>;
 }
 
+function AdminLayout({ page, jobId, locale, theme, t, setPage, setJobId, setLocale, setTheme, setLogged }: { page: string; jobId: number | null; locale: Locale; theme: Theme; t: (key: string) => string; setPage: (page: string) => void; setJobId: (id: number | null) => void; setLocale: (locale: Locale) => void; setTheme: (theme: Theme) => void; setLogged: (logged: boolean) => void }) {
+  const title = jobId ? t('jobDetail') : pageTitle(page, t);
+  const subtitle = jobId ? 'Analise detalhada da execucao, itens e chamadas externas.' : pageSubtitle(page);
+  const openPage = (id: string) => { setJobId(null); setPage(id); };
+  const logout = () => api('/admin/api/logout', { method: 'POST' }).then(() => setLogged(false));
+  return <div className="min-h-screen bg-zinc-100 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
+    <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-zinc-900/10 bg-zinc-950 p-5 text-zinc-100 shadow-xl dark:border-zinc-800 lg:flex lg:flex-col">
+      <div className="mb-7 flex items-center gap-3">
+        <span className="grid h-10 w-10 place-items-center rounded bg-emerald-500 text-white"><Database className="h-5 w-5" /></span>
+        <div>
+          <p className="text-base font-semibold">MasterFut Admin</p>
+          <p className="text-xs text-zinc-400">Data operations hub</p>
+        </div>
+      </div>
+      <nav className="flex-1 space-y-6 overflow-auto pr-1">
+        {navGroups.map(group => <div key={group.label}>
+          <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">{group.label}</p>
+          <div className="space-y-1">{group.items.map(([id, Icon]) => <button key={id} className={`flex w-full items-center gap-3 rounded px-3 py-2.5 text-left text-sm transition ${page === id && !jobId ? 'bg-emerald-500 text-white shadow-sm' : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'}`} onClick={() => openPage(id)}><Icon className="h-4 w-4" />{t(id)}</button>)}</div>
+        </div>)}
+      </nav>
+      <button className="mt-5 flex w-full items-center gap-3 rounded border border-zinc-800 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-900 hover:text-white" onClick={logout}><LogOut className="h-4 w-4" />{t('logout')}</button>
+    </aside>
+    <div className="lg:pl-72">
+      <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 px-4 py-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90 lg:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold tracking-normal">{title}</h1>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select className="rounded border bg-transparent px-2 py-1 text-sm dark:border-zinc-700" value={locale} onChange={e => setLocale(e.target.value as Locale)}><option value="pt-BR">Portugues</option><option value="en">English</option><option value="es">Espanol</option><option value="zh">Chinese</option></select>
+            <button className="rounded border p-2 dark:border-zinc-700" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
+            <button className="rounded border p-2 dark:border-zinc-700 lg:hidden" onClick={logout}><LogOut className="h-4 w-4" /></button>
+          </div>
+        </div>
+      </header>
+      <main className="p-4 lg:p-8">{jobId && <SyncJobDetail id={jobId} t={t} back={() => setJobId(null)} />}{!jobId && page === 'dashboard' && <Dashboard t={t} />}{!jobId && page === 'users' && <AdminUsers />}{!jobId && page === 'providers' && <Providers t={t} />}{!jobId && page === 'keys' && <Keys t={t} />}{!jobId && page === 'sync' && <SyncJobs t={t} openJob={setJobId} />}{!jobId && page === 'schedules' && <Schedules t={t} openJob={setJobId} />}{!jobId && page === 'logs' && <Logs t={t} />}{!jobId && !['dashboard', 'users', 'providers', 'keys', 'sync', 'schedules', 'logs', 'settings'].includes(page) && <EntityPage name={page} />}{!jobId && page === 'settings' && <SettingsPage t={t} />}</main>
+    </div>
+  </div>;
+}
+
 function App() {
   const [locale, setLocale] = useState<Locale>(() => (localStorage.getItem('futia.locale') as Locale) || 'pt-BR');
   const [theme, setTheme] = useState<Theme>(() => {
@@ -225,7 +349,7 @@ function App() {
   useEffect(() => { api('/admin/api/me').then(() => setLogged(true)).catch(() => setLogged(false)); }, []);
   if (logged === null) return <main className="grid min-h-screen place-items-center"><RefreshCw className="h-6 w-6 animate-spin" /></main>;
   if (!logged) return <Login onLogin={() => setLogged(true)} t={t} />;
-  return <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50"><aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 lg:block"><div className="mb-6 flex items-center gap-2 font-semibold"><Database className="text-emerald-600" /> FutIA Data Hub</div><nav className="space-y-1">{pages.map(([id, Icon]) => <button key={id} className={`flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm ${page === id && !jobId ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`} onClick={() => { setJobId(null); setPage(id); }}><Icon className="h-4 w-4" />{t(id)}</button>)}</nav></aside><div className="lg:pl-64"><header className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90"><h1 className="text-lg font-semibold">{jobId ? t('jobDetail') : t(page)}</h1><div className="flex items-center gap-2"><select className="rounded border bg-transparent px-2 py-1 text-sm dark:border-zinc-700" value={locale} onChange={e => setLocale(e.target.value as Locale)}><option value="pt-BR">Portugues</option><option value="en">English</option><option value="es">Espanol</option><option value="zh">中文</option></select><button className="rounded border p-2 dark:border-zinc-700" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button><button className="rounded border p-2 dark:border-zinc-700" onClick={() => api('/admin/api/logout', { method: 'POST' }).then(() => setLogged(false))}><LogOut className="h-4 w-4" /></button></div></header><main className="p-4">{jobId && <SyncJobDetail id={jobId} t={t} back={() => setJobId(null)} />}{!jobId && page === 'dashboard' && <Dashboard t={t} />}{!jobId && page === 'users' && <AdminUsers />}{!jobId && page === 'providers' && <Providers t={t} />}{!jobId && page === 'keys' && <Keys t={t} />}{!jobId && page === 'sync' && <SyncJobs t={t} openJob={setJobId} />}{!jobId && page === 'schedules' && <Schedules t={t} openJob={setJobId} />}{!jobId && page === 'logs' && <Logs t={t} />}{!jobId && !['dashboard', 'users', 'providers', 'keys', 'sync', 'schedules', 'logs', 'settings'].includes(page) && <EntityPage name={page} />}{!jobId && page === 'settings' && <SettingsPage t={t} />}</main></div></div>;
+  return <AdminLayout page={page} jobId={jobId} locale={locale} theme={theme} t={t} setPage={setPage} setJobId={setJobId} setLocale={setLocale} setTheme={setTheme} setLogged={setLogged} />;
 }
 
 createRoot(document.getElementById('root')!).render(<App />);
