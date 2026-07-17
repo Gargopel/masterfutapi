@@ -35,6 +35,11 @@ Route::middleware(['auth', \App\Http\Middleware\EnsureAdmin::class])->group(func
     Route::get('/admin/api/users-overview', [AdminApiController::class, 'usersOverview']);
     Route::get('/admin/api/user-api-tokens', [AdminApiController::class, 'userApiTokens']);
     Route::get('/admin/api/user-api-usage', [AdminApiController::class, 'userApiUsage']);
+    Route::get('/admin/api/plans', [AdminApiController::class, 'plans']);
+    Route::post('/admin/api/plans', [AdminApiController::class, 'storePlan']);
+    Route::patch('/admin/api/plans/{plan}', [AdminApiController::class, 'updatePlan']);
+    Route::get('/admin/api/plan-options', [AdminApiController::class, 'planOptions']);
+    Route::patch('/admin/api/users/{user}/plan', [AdminApiController::class, 'updateUserPlan']);
     Route::get('/admin/api/alerts', [AdminApiController::class, 'alerts']);
     Route::post('/admin/api/alerts/{alert}/read', [AdminApiController::class, 'readAlert']);
     Route::post('/admin/api/alerts/{alert}/resolve', [AdminApiController::class, 'resolveAlert']);

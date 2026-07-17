@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Plan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -49,6 +50,7 @@ class UserAuthController extends Controller
             'email' => $data['email'],
             'password' => $data['password'],
             'is_admin' => false,
+            'plan_id' => Plan::default()->id,
         ]);
 
         Auth::login($user);

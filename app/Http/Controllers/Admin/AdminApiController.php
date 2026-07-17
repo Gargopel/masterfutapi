@@ -10,6 +10,7 @@ use App\Models\ApiRequestLog;
 use App\Models\Country;
 use App\Models\League;
 use App\Models\MatchStatistic;
+use App\Models\Plan;
 use App\Models\Season;
 use App\Models\SiteSetting;
 use App\Models\Sport;
@@ -146,6 +147,7 @@ class AdminApiController extends Controller
     {
         $today = now()->startOfDay();
         $users = User::query()
+            ->with('plan:id,name,slug')
             ->withCount([
                 'apiTokens',
                 'apiTokens as active_api_tokens_count' => fn ($query) => $query->whereNull('revoked_at'),
@@ -200,6 +202,74 @@ class AdminApiController extends Controller
             ],
             'data' => $logs->paginate(50),
         ];
+    }
+
+    public function plans()
+    {
+        return Plan::with([
+            'accessRules.country:id,name,code',
+            'accessRules.league:id,name,slug',
+            'accessRules.season:id,league_id,year,name',
+        ])
+            ->withCount('users')
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get();
+    }
+
+    public function storePlan(Request $request)
+    {
+        $data = $this->planRules($request);
+
+        return DB::transaction(function () use ($data) {
+            if ($data['is_default'] ?? false) {
+                Plan::query()->update(['is_default' => false]);
+            }
+
+            $plan = Plan::create(collect($data)->except('access_rules')->all());
+            $this->syncPlanAccessRules($plan, $data['access_rules'] ?? []);
+
+            return response()->json($plan->load(['accessRules.country:id,name,code', 'accessRules.league:id,name,slug', 'accessRules.season:id,league_id,year,name']), 201);
+        });
+    }
+
+    public function updatePlan(Request $request, Plan $plan)
+    {
+        $data = $this->planRules($request, $plan);
+
+        return DB::transaction(function () use ($plan, $data) {
+            if ($data['is_default'] ?? false) {
+                Plan::query()->whereKeyNot($plan->id)->update(['is_default' => false]);
+            }
+
+            $plan->update(collect($data)->except('access_rules')->all());
+            $this->syncPlanAccessRules($plan, $data['access_rules'] ?? []);
+
+            return $plan->fresh()->load(['accessRules.country:id,name,code', 'accessRules.league:id,name,slug', 'accessRules.season:id,league_id,year,name']);
+        });
+    }
+
+    public function planOptions()
+    {
+        return [
+            'regions' => [
+                ['value' => 'americas', 'label' => 'Americas'],
+            ],
+            'countries' => Country::orderBy('name')->get(['id', 'name', 'code']),
+            'leagues' => League::with('country:id,name,code')->orderBy('name')->get(['id', 'country_id', 'name', 'slug']),
+            'seasons' => Season::with('league:id,name,slug')->latest('year')->get(['id', 'league_id', 'year', 'name']),
+        ];
+    }
+
+    public function updateUserPlan(Request $request, User $user)
+    {
+        $data = $request->validate([
+            'plan_id' => ['nullable', 'exists:plans,id'],
+        ]);
+
+        $user->update(['plan_id' => $data['plan_id'] ?? null]);
+
+        return $user->fresh()->load('plan:id,name,slug');
     }
 
     public function storeProviderKey(Request $request)
@@ -648,5 +718,40 @@ class AdminApiController extends Controller
             'priority' => ['nullable', 'integer', 'min:1'],
             'config' => ['nullable', 'array'],
         ]);
+    }
+
+    private function planRules(Request $request, ?Plan $plan = null): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'slug' => ['required', 'string', 'max:120', Rule::unique('plans', 'slug')->ignore($plan)],
+            'description' => ['nullable', 'string', 'max:500'],
+            'is_active' => ['boolean'],
+            'is_default' => ['boolean'],
+            'allow_all' => ['boolean'],
+            'requests_per_minute' => ['required', 'integer', 'min:1', 'max:10000'],
+            'max_active_api_keys' => ['required', 'integer', 'min:1', 'max:100'],
+            'access_rules' => ['array'],
+            'access_rules.*.scope_type' => ['required', Rule::in(['region', 'country', 'league', 'season'])],
+            'access_rules.*.region' => ['nullable', 'required_if:access_rules.*.scope_type,region', Rule::in(['americas'])],
+            'access_rules.*.country_id' => ['nullable', 'required_if:access_rules.*.scope_type,country', 'exists:countries,id'],
+            'access_rules.*.league_id' => ['nullable', 'required_if:access_rules.*.scope_type,league', 'exists:leagues,id'],
+            'access_rules.*.season_id' => ['nullable', 'required_if:access_rules.*.scope_type,season', 'exists:seasons,id'],
+        ]);
+    }
+
+    private function syncPlanAccessRules(Plan $plan, array $rules): void
+    {
+        $plan->accessRules()->delete();
+
+        foreach ($rules as $rule) {
+            $plan->accessRules()->create([
+                'scope_type' => $rule['scope_type'],
+                'region' => $rule['scope_type'] === 'region' ? ($rule['region'] ?? null) : null,
+                'country_id' => $rule['scope_type'] === 'country' ? ($rule['country_id'] ?? null) : null,
+                'league_id' => $rule['scope_type'] === 'league' ? ($rule['league_id'] ?? null) : null,
+                'season_id' => $rule['scope_type'] === 'season' ? ($rule['season_id'] ?? null) : null,
+            ]);
+        }
     }
 }

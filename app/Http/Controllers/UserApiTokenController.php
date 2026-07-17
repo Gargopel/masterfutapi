@@ -3,12 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\UserApiToken;
+use App\Models\Plan;
 use Illuminate\Http\Request;
 
 class UserApiTokenController extends Controller
 {
-    private const MAX_ACTIVE_TOKENS = 3;
-
     public function index(Request $request)
     {
         return view('user-api-keys', [
@@ -26,9 +25,11 @@ class UserApiTokenController extends Controller
 
         $activeTokens = $request->user()->apiTokens()->whereNull('revoked_at')->count();
 
-        if ($activeTokens >= self::MAX_ACTIVE_TOKENS) {
+        $maxActiveTokens = (int) ($request->user()->plan?->max_active_api_keys ?: Plan::default()->max_active_api_keys);
+
+        if ($activeTokens >= $maxActiveTokens) {
             return back()->withErrors([
-                'name' => 'O plano free permite no maximo 3 API keys ativas por usuario.',
+                'name' => "Seu plano permite no maximo {$maxActiveTokens} API keys ativas.",
             ])->withInput();
         }
 

@@ -5,6 +5,12 @@ namespace Tests\Feature;
 use App\Models\ApiProvider;
 use App\Models\ApiProviderKey;
 use App\Models\ApiRequestLog;
+use App\Models\Country;
+use App\Models\League;
+use App\Models\Plan;
+use App\Models\Season;
+use App\Models\Sport;
+use App\Models\SportsMatch;
 use App\Models\SyncJob;
 use App\Models\User;
 use App\Models\UserApiToken;
@@ -103,6 +109,62 @@ class FutiaDataHubTest extends TestCase
         $this->getJson('/api/v1/sports')->assertUnauthorized();
         $this->withHeaders($this->apiHeaders())->getJson('/api/v1/sports')->assertOk()->assertJsonFragment(['slug' => 'football']);
         $this->withHeaders($this->apiHeaders())->getJson('/api/v1/leagues')->assertOk()->assertJsonFragment(['slug' => 'brasileirao-serie-a']);
+    }
+
+    public function test_plan_can_limit_user_to_single_league_season(): void
+    {
+        $sport = Sport::create(['name' => 'Football', 'slug' => 'football']);
+        $country = Country::create(['name' => 'Brazil', 'code' => 'BR']);
+        $serieA = League::create(['sport_id' => $sport->id, 'country_id' => $country->id, 'name' => 'Brasileiro Serie A', 'slug' => 'brasileiro-serie-a']);
+        $serieB = League::create(['sport_id' => $sport->id, 'country_id' => $country->id, 'name' => 'Brasileiro Serie B', 'slug' => 'brasileiro-serie-b']);
+        $season2026 = Season::create(['league_id' => $serieA->id, 'year' => 2026, 'name' => '2026']);
+        $season2025 = Season::create(['league_id' => $serieA->id, 'year' => 2025, 'name' => '2025']);
+        $otherSeason = Season::create(['league_id' => $serieB->id, 'year' => 2026, 'name' => '2026']);
+        SportsMatch::create(['sport_id' => $sport->id, 'league_id' => $serieA->id, 'season_id' => $season2026->id, 'starts_at' => now(), 'status' => 'scheduled']);
+        SportsMatch::create(['sport_id' => $sport->id, 'league_id' => $serieA->id, 'season_id' => $season2025->id, 'starts_at' => now(), 'status' => 'scheduled']);
+        SportsMatch::create(['sport_id' => $sport->id, 'league_id' => $serieB->id, 'season_id' => $otherSeason->id, 'starts_at' => now(), 'status' => 'scheduled']);
+        $plan = Plan::create(['name' => 'Free', 'slug' => 'free', 'is_default' => true, 'requests_per_minute' => 10, 'max_active_api_keys' => 3]);
+        $plan->accessRules()->create(['scope_type' => 'season', 'season_id' => $season2026->id]);
+        $user = User::factory()->create(['is_admin' => false, 'plan_id' => $plan->id]);
+        [, $plainTextToken] = UserApiToken::issueFor($user, 'FutAI');
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/v1/leagues')
+            ->assertOk()
+            ->assertJsonFragment(['slug' => 'brasileiro-serie-a'])
+            ->assertJsonMissing(['slug' => 'brasileiro-serie-b']);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/v1/seasons')
+            ->assertOk()
+            ->assertJsonFragment(['year' => 2026])
+            ->assertJsonMissing(['year' => 2025]);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/v1/matches')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_plan_region_americas_allows_american_leagues_only(): void
+    {
+        $sport = Sport::create(['name' => 'Football', 'slug' => 'football']);
+        $brazil = Country::create(['name' => 'Brazil', 'code' => 'BR']);
+        $england = Country::create(['name' => 'England', 'code' => 'GB']);
+        $brasileiro = League::create(['sport_id' => $sport->id, 'country_id' => $brazil->id, 'name' => 'Brasileiro', 'slug' => 'brasileiro']);
+        $premierLeague = League::create(['sport_id' => $sport->id, 'country_id' => $england->id, 'name' => 'Premier League', 'slug' => 'premier-league']);
+        Season::create(['league_id' => $brasileiro->id, 'year' => 2026]);
+        Season::create(['league_id' => $premierLeague->id, 'year' => 2026]);
+        $plan = Plan::create(['name' => 'Americas', 'slug' => 'americas', 'requests_per_minute' => 10, 'max_active_api_keys' => 3]);
+        $plan->accessRules()->create(['scope_type' => 'region', 'region' => 'americas']);
+        $user = User::factory()->create(['is_admin' => false, 'plan_id' => $plan->id]);
+        [, $plainTextToken] = UserApiToken::issueFor($user, 'FutAI');
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/v1/leagues')
+            ->assertOk()
+            ->assertJsonFragment(['slug' => 'brasileiro'])
+            ->assertJsonMissing(['slug' => 'premier-league']);
     }
 
     public function test_rate_limiter_blocks_excess_requests(): void
@@ -403,6 +465,46 @@ class FutiaDataHubTest extends TestCase
             ->assertOk()
             ->assertJsonPath('cards.requests', 1)
             ->assertJsonFragment(['endpoint' => '/api/v1/metadata']);
+    }
+
+    public function test_admin_can_manage_plans_and_assign_user_plan(): void
+    {
+        $this->seed();
+        $admin = User::where('is_admin', true)->first();
+        $user = User::factory()->create(['is_admin' => false]);
+        $sport = Sport::first() ?? Sport::create(['name' => 'Football', 'slug' => 'football']);
+        $country = Country::first() ?? Country::create(['name' => 'Brazil', 'code' => 'BR']);
+        $league = League::create(['sport_id' => $sport->id, 'country_id' => $country->id, 'name' => 'Brasileiro Serie A', 'slug' => 'brasileiro-serie-a']);
+        $season = Season::create(['league_id' => $league->id, 'year' => 2026, 'name' => '2026']);
+
+        $response = $this->actingAs($admin)->postJson('/admin/api/plans', [
+            'name' => 'Free',
+            'slug' => 'free',
+            'description' => 'Brasileiro Serie A 2026',
+            'is_active' => true,
+            'is_default' => true,
+            'allow_all' => false,
+            'requests_per_minute' => 10,
+            'max_active_api_keys' => 3,
+            'access_rules' => [
+                ['scope_type' => 'season', 'season_id' => $season->id],
+            ],
+        ])->assertCreated()
+            ->assertJsonPath('name', 'Free')
+            ->assertJsonPath('access_rules.0.scope_type', 'season');
+
+        $planId = $response->json('id');
+
+        $this->actingAs($admin)->patchJson("/admin/api/users/{$user->id}/plan", [
+            'plan_id' => $planId,
+        ])->assertOk()
+            ->assertJsonPath('plan.id', $planId);
+
+        $this->actingAs($admin)->getJson('/admin/api/plans')
+            ->assertOk()
+            ->assertJsonFragment(['slug' => 'free']);
+
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'plan_id' => $planId]);
     }
 
     public function test_docs_page_and_profile_password_update_work(): void

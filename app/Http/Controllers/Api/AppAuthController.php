@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\UserApiToken;
 use Illuminate\Http\JsonResponse;
@@ -13,8 +14,6 @@ use Illuminate\Validation\ValidationException;
 
 class AppAuthController extends Controller
 {
-    private const MAX_ACTIVE_TOKENS = 3;
-
     public function register(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -29,6 +28,7 @@ class AppAuthController extends Controller
             'email' => $data['email'],
             'password' => $data['password'],
             'is_admin' => false,
+            'plan_id' => Plan::default()->id,
         ]);
 
         [$token, $plainTextToken] = UserApiToken::issueFor($user, $data['api_key_name'] ?? 'FutAI App');
@@ -37,7 +37,7 @@ class AppAuthController extends Controller
             'message' => 'Conta criada com sucesso.',
             'user' => $this->userPayload($user),
             'api_key' => $this->tokenPayload($token, $plainTextToken),
-            'limits' => $this->limitsPayload(),
+            'limits' => $this->limitsPayload($user),
         ], 201);
     }
 
@@ -64,20 +64,21 @@ class AppAuthController extends Controller
                 'message' => 'Login realizado com sucesso.',
                 'user' => $this->userPayload($user),
                 'api_keys' => $this->activeTokensPayload($user),
-                'limits' => $this->limitsPayload(),
+                'limits' => $this->limitsPayload($user),
             ]);
         }
 
         $activeTokens = $user->apiTokens()->whereNull('revoked_at')->oldest()->get();
+        $maxActiveTokens = $this->maxActiveTokens($user);
 
-        if ($activeTokens->count() >= self::MAX_ACTIVE_TOKENS) {
+        if ($activeTokens->count() >= $maxActiveTokens) {
             if (! ($data['revoke_oldest'] ?? false)) {
                 return response()->json([
                     'message' => 'O plano free permite no maximo 3 API keys ativas por usuario.',
                     'code' => 'api_key_limit_reached',
                     'user' => $this->userPayload($user),
                     'api_keys' => $this->activeTokensPayload($user),
-                    'limits' => $this->limitsPayload(),
+                    'limits' => $this->limitsPayload($user),
                 ], 422);
             }
 
@@ -90,7 +91,7 @@ class AppAuthController extends Controller
             'message' => 'Login realizado com sucesso.',
             'user' => $this->userPayload($user),
             'api_key' => $this->tokenPayload($token, $plainTextToken),
-            'limits' => $this->limitsPayload(),
+            'limits' => $this->limitsPayload($user),
         ]);
     }
 
@@ -101,7 +102,7 @@ class AppAuthController extends Controller
         return response()->json([
             'user' => $this->userPayload($request->user()),
             'current_api_key' => $token ? $this->tokenPayload($token) : null,
-            'limits' => $this->limitsPayload(),
+            'limits' => $this->limitsPayload($request->user()),
         ]);
     }
 
@@ -113,6 +114,11 @@ class AppAuthController extends Controller
             'email' => $user->email,
             'is_admin' => $user->is_admin,
             'created_at' => $user->created_at?->toISOString(),
+            'plan' => $user->plan ? [
+                'id' => $user->plan->id,
+                'name' => $user->plan->name,
+                'slug' => $user->plan->slug,
+            ] : null,
         ];
     }
 
@@ -139,11 +145,21 @@ class AppAuthController extends Controller
             ->all();
     }
 
-    private function limitsPayload(): array
+    private function limitsPayload(?User $user): array
     {
         return [
-            'active_api_keys' => self::MAX_ACTIVE_TOKENS,
-            'requests_per_minute' => 10,
+            'active_api_keys' => $this->maxActiveTokens($user),
+            'requests_per_minute' => $this->requestsPerMinute($user),
         ];
+    }
+
+    private function maxActiveTokens(?User $user): int
+    {
+        return (int) ($user?->plan?->max_active_api_keys ?: Plan::default()->max_active_api_keys);
+    }
+
+    private function requestsPerMinute(?User $user): int
+    {
+        return (int) ($user?->plan?->requests_per_minute ?: Plan::default()->requests_per_minute);
     }
 }

@@ -10,16 +10,28 @@ use App\Models\Sport;
 use App\Models\SportsMatch;
 use App\Models\Standing;
 use App\Models\Team;
+use App\Services\Plans\PlanAccessService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
 class PublicSportsApiController extends Controller
 {
+    public function __construct(private readonly PlanAccessService $planAccess) {}
+
     public function sports() { return Sport::where('is_active', true)->orderBy('name')->paginate(50); }
-    public function countries() { return Country::orderBy('name')->paginate(100); }
+    public function countries(Request $request)
+    {
+        $leagueIds = $this->planAccess->allowedLeagueIds($request->user());
+
+        return Country::query()
+            ->when($leagueIds !== null, fn ($query) => $query->whereHas('leagues', fn ($leagues) => $leagues->whereIn('id', $leagueIds)))
+            ->orderBy('name')
+            ->paginate(100);
+    }
     public function leagues(Request $request)
     {
         return League::with(['sport:id,name,slug', 'country:id,name,code'])
+            ->tap(fn ($query) => $this->planAccess->applyLeagueScope($query, $request->user(), 'id'))
             ->when($request->filled('sport'), fn ($query) => $query->whereHas('sport', fn ($sport) => $sport->where('slug', (string) $request->query('sport'))->orWhere('id', $request->integer('sport'))))
             ->when($request->filled('country'), fn ($query) => $query->whereHas('country', fn ($country) => $country->where('code', (string) $request->query('country'))->orWhere('id', $request->integer('country'))))
             ->when($request->has('active'), fn ($query) => $query->where('is_active', $request->boolean('active')))
@@ -31,15 +43,23 @@ class PublicSportsApiController extends Controller
     public function seasons(Request $request)
     {
         return Season::query()
+            ->tap(fn ($query) => $this->planAccess->applyLeagueScope($query, $request->user()))
+            ->tap(fn ($query) => $this->planAccess->applySeasonScope($query, $request->user(), 'id'))
             ->when($request->filled('updated_since'), fn ($query) => $query->where('updated_at', '>=', $request->date('updated_since')))
             ->latest('year')
             ->paginate(50);
     }
     public function teams(Request $request)
     {
+        $leagueIds = $this->planAccess->allowedLeagueIds($request->user());
+        $seasonIds = $this->planAccess->allowedSeasonIds($request->user());
+
         return Team::query()
             ->when($request->filled('sport'), fn ($query) => $query->whereHas('sport', fn ($sport) => $sport->where('slug', (string) $request->query('sport'))->orWhere('id', $request->integer('sport'))))
             ->when($request->filled('country'), fn ($query) => $query->whereHas('country', fn ($country) => $country->where('code', (string) $request->query('country'))->orWhere('id', $request->integer('country'))))
+            ->when($leagueIds !== null, fn ($query) => $query->where(fn ($nested) => $nested
+                ->whereHas('homeMatches', fn ($matches) => $matches->whereIn('league_id', $leagueIds)->when($seasonIds !== null, fn ($scoped) => $scoped->whereIn('season_id', $seasonIds)))
+                ->orWhereHas('awayMatches', fn ($matches) => $matches->whereIn('league_id', $leagueIds)->when($seasonIds !== null, fn ($scoped) => $scoped->whereIn('season_id', $seasonIds)))))
             ->when($request->filled('league_id'), fn ($query) => $query->where(fn ($nested) => $nested
                 ->whereHas('homeMatches', fn ($matches) => $matches->where('league_id', $request->integer('league_id')))
                 ->orWhereHas('awayMatches', fn ($matches) => $matches->where('league_id', $request->integer('league_id')))))
@@ -51,6 +71,8 @@ class PublicSportsApiController extends Controller
     public function matches(Request $request)
     {
         return SportsMatch::with(['league:id,name,slug', 'season:id,league_id,year,name', 'homeTeam:id,name,slug,logo_url', 'awayTeam:id,name,slug,logo_url'])
+            ->tap(fn ($query) => $this->planAccess->applyLeagueScope($query, $request->user()))
+            ->tap(fn ($query) => $this->planAccess->applySeasonScope($query, $request->user()))
             ->when($request->filled('league_id'), fn ($query) => $query->where('league_id', $request->integer('league_id')))
             ->when($request->filled('season_id'), fn ($query) => $query->where('season_id', $request->integer('season_id')))
             ->when($request->filled('team_id'), fn ($query) => $query->where(fn ($nested) => $nested->where('home_team_id', $request->integer('team_id'))->orWhere('away_team_id', $request->integer('team_id'))))
@@ -64,6 +86,8 @@ class PublicSportsApiController extends Controller
     }
     public function match(SportsMatch $match)
     {
+        abort_unless($this->planAccess->canAccessMatch(request()->user(), $match->league_id, $match->season_id), 403);
+
         $match->load([
             'league:id,name,slug',
             'season:id,league_id,year,name',
@@ -76,6 +100,8 @@ class PublicSportsApiController extends Controller
     public function standings(Request $request)
     {
         return Standing::with(['league:id,name,slug', 'season:id,league_id,year,name', 'team:id,name,slug,logo_url'])
+            ->tap(fn ($query) => $this->planAccess->applyLeagueScope($query, $request->user()))
+            ->tap(fn ($query) => $this->planAccess->applySeasonScope($query, $request->user()))
             ->when($request->filled('league_id'), fn ($query) => $query->where('league_id', $request->integer('league_id')))
             ->when($request->filled('season_id'), fn ($query) => $query->where('season_id', $request->integer('season_id')))
             ->when($request->filled('updated_since'), fn ($query) => $query->where('updated_at', '>=', $request->date('updated_since')))
@@ -84,34 +110,51 @@ class PublicSportsApiController extends Controller
             ->through(fn (Standing $standing) => $this->hideInternalFields($standing));
     }
 
-    public function summary()
+    public function summary(Request $request)
     {
+        $matches = SportsMatch::query()
+            ->tap(fn ($query) => $this->planAccess->applyLeagueScope($query, $request->user()))
+            ->tap(fn ($query) => $this->planAccess->applySeasonScope($query, $request->user()));
+        $leagueIds = $this->planAccess->allowedLeagueIds($request->user());
+        $seasonIds = $this->planAccess->allowedSeasonIds($request->user());
+
         return [
             'sports' => Sport::count(),
-            'countries' => Country::count(),
-            'leagues' => League::count(),
-            'seasons' => Season::count(),
+            'countries' => Country::query()->when($leagueIds !== null, fn ($query) => $query->whereHas('leagues', fn ($leagues) => $leagues->whereIn('id', $leagueIds)))->count(),
+            'leagues' => League::query()->when($leagueIds !== null, fn ($query) => $query->whereIn('id', $leagueIds))->count(),
+            'seasons' => Season::query()->when($leagueIds !== null, fn ($query) => $query->whereIn('league_id', $leagueIds))->when($seasonIds !== null, fn ($query) => $query->whereIn('id', $seasonIds))->count(),
             'teams' => Team::count(),
-            'matches' => SportsMatch::count(),
-            'finished_matches' => SportsMatch::where('status', 'finished')->count(),
-            'future_matches' => SportsMatch::where('starts_at', '>', now())->count(),
+            'matches' => (clone $matches)->count(),
+            'finished_matches' => (clone $matches)->where('status', 'finished')->count(),
+            'future_matches' => (clone $matches)->where('starts_at', '>', now())->count(),
             'standings_rows' => Standing::count(),
-            'last_synced_at' => SportsMatch::max('last_synced_at'),
+            'last_synced_at' => (clone $matches)->max('last_synced_at'),
         ];
     }
 
-    public function metadata()
+    public function metadata(Request $request)
     {
+        $matches = SportsMatch::query()
+            ->tap(fn ($query) => $this->planAccess->applyLeagueScope($query, $request->user()))
+            ->tap(fn ($query) => $this->planAccess->applySeasonScope($query, $request->user()));
+        $leagueIds = $this->planAccess->allowedLeagueIds($request->user());
+        $seasonIds = $this->planAccess->allowedSeasonIds($request->user());
+
         return [
             'api_version' => 'v1',
+            'plan' => [
+                'restricted' => $this->planAccess->hasRestrictions($request->user()),
+                'allowed_league_ids' => $leagueIds?->values(),
+                'allowed_season_ids' => $seasonIds?->values(),
+            ],
             'totals' => [
                 'sports' => Sport::count(),
-                'leagues' => League::count(),
-                'seasons' => Season::count(),
+                'leagues' => League::query()->when($leagueIds !== null, fn ($query) => $query->whereIn('id', $leagueIds))->count(),
+                'seasons' => Season::query()->when($leagueIds !== null, fn ($query) => $query->whereIn('league_id', $leagueIds))->when($seasonIds !== null, fn ($query) => $query->whereIn('id', $seasonIds))->count(),
                 'teams' => Team::count(),
-                'matches' => SportsMatch::count(),
+                'matches' => (clone $matches)->count(),
             ],
-            'last_sync_at' => SportsMatch::max('last_synced_at'),
+            'last_sync_at' => (clone $matches)->max('last_synced_at'),
             'freshness' => [
                 'last_successful_sync_at' => \App\Models\SyncJob::where('status', 'completed')->max('finished_at'),
                 'last_data_refresh_at' => SportsMatch::max('last_synced_at'),

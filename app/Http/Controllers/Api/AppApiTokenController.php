@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Plan;
+use App\Models\User;
 use App\Models\UserApiToken;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AppApiTokenController extends Controller
 {
-    private const MAX_ACTIVE_TOKENS = 3;
-
     public function index(Request $request): JsonResponse
     {
         return response()->json([
@@ -32,7 +32,7 @@ class AppApiTokenController extends Controller
 
         $activeTokens = $request->user()->apiTokens()->whereNull('revoked_at')->count();
 
-        if ($activeTokens >= self::MAX_ACTIVE_TOKENS) {
+        if ($activeTokens >= $this->maxActiveTokens($request->user())) {
             return response()->json([
                 'message' => 'O plano free permite no maximo 3 API keys ativas por usuario.',
                 'code' => 'api_key_limit_reached',
@@ -79,8 +79,13 @@ class AppApiTokenController extends Controller
     private function limitsPayload(): array
     {
         return [
-            'active_api_keys' => self::MAX_ACTIVE_TOKENS,
-            'requests_per_minute' => 10,
+            'active_api_keys' => $this->maxActiveTokens(request()->user()),
+            'requests_per_minute' => (int) (request()->user()?->plan?->requests_per_minute ?: Plan::default()->requests_per_minute),
         ];
+    }
+
+    private function maxActiveTokens(?User $user): int
+    {
+        return (int) ($user?->plan?->max_active_api_keys ?: Plan::default()->max_active_api_keys);
     }
 }

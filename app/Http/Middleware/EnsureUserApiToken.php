@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureUserApiToken
 {
-    private const REQUESTS_PER_MINUTE = 10;
+    public const DEFAULT_REQUESTS_PER_MINUTE = 10;
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -35,9 +35,10 @@ class EnsureUserApiToken
             ], 401);
         }
 
+        $requestsPerMinute = (int) ($token->user?->plan?->requests_per_minute ?: self::DEFAULT_REQUESTS_PER_MINUTE);
         $rateLimitKey = 'masterfut:user:'.$token->user_id;
 
-        if (RateLimiter::tooManyAttempts($rateLimitKey, self::REQUESTS_PER_MINUTE)) {
+        if (RateLimiter::tooManyAttempts($rateLimitKey, $requestsPerMinute)) {
             $retryAfter = RateLimiter::availableIn($rateLimitKey);
             $this->logRequest($request, $token, 429, $startedAt);
 
@@ -46,7 +47,7 @@ class EnsureUserApiToken
                 'retry_after' => $retryAfter,
             ], 429)->withHeaders([
                 'Retry-After' => $retryAfter,
-                'X-RateLimit-Limit' => self::REQUESTS_PER_MINUTE,
+                'X-RateLimit-Limit' => $requestsPerMinute,
                 'X-RateLimit-Remaining' => 0,
             ]);
         }
@@ -58,8 +59,8 @@ class EnsureUserApiToken
         $request->setUserResolver(fn () => $token->user);
 
         $response = $next($request);
-        $response->headers->set('X-RateLimit-Limit', (string) self::REQUESTS_PER_MINUTE);
-        $response->headers->set('X-RateLimit-Remaining', (string) RateLimiter::remaining($rateLimitKey, self::REQUESTS_PER_MINUTE));
+        $response->headers->set('X-RateLimit-Limit', (string) $requestsPerMinute);
+        $response->headers->set('X-RateLimit-Remaining', (string) RateLimiter::remaining($rateLimitKey, $requestsPerMinute));
         $this->logRequest($request, $token, $response->getStatusCode(), $startedAt);
 
         return $response;
