@@ -37,7 +37,8 @@
         <section class="mx-auto grid max-w-7xl gap-8 px-6 py-12 lg:grid-cols-[260px_1fr] lg:px-8">
             <aside class="hidden lg:block">
                 <nav class="sticky top-6 grid gap-2 text-sm">
-                    <a class="rounded bg-zinc-100 px-3 py-2 font-semibold" href="#auth">Autenticacao</a>
+                    <a class="rounded bg-zinc-100 px-3 py-2 font-semibold" href="#futai-flow">Fluxo FutAI</a>
+                    <a class="rounded px-3 py-2 hover:bg-zinc-100" href="#auth">Autenticacao</a>
                     <a class="rounded px-3 py-2 hover:bg-zinc-100" href="#quickstart">Quickstart</a>
                     <a class="rounded px-3 py-2 hover:bg-zinc-100" href="#pagination">Paginacao</a>
                     <a class="rounded px-3 py-2 hover:bg-zinc-100" href="#endpoints">Endpoints</a>
@@ -47,6 +48,36 @@
             </aside>
 
             <div class="space-y-10">
+                <section id="futai-flow" class="rounded border border-zinc-200 p-6">
+                    <h2 class="text-2xl font-black">Fluxo FutAI</h2>
+                    <p class="mt-3 text-zinc-600">O app FutAI deve usar os endpoints JSON em `/api/app` para criar conta, fazer login e obter uma API key. Depois disso, a mesma chave autentica as chamadas em `/api/v1`.</p>
+                    <div class="mt-5 grid gap-3">
+                        <article class="rounded bg-zinc-100 p-4">
+                            <code class="font-mono text-sm font-bold">POST /api/app/register</code>
+                            <p class="mt-2 text-sm text-zinc-600">Cria o usuario e retorna uma API key em texto puro uma unica vez.</p>
+                            <pre class="mt-3 overflow-x-auto rounded bg-zinc-950 p-4 text-sm text-emerald-100"><code>{
+  "name": "Cliente FutAI",
+  "email": "cliente@email.com",
+  "password": "senha-segura",
+  "password_confirmation": "senha-segura",
+  "api_key_name": "FutAI Desktop"
+}</code></pre>
+                        </article>
+                        <article class="rounded bg-zinc-100 p-4">
+                            <code class="font-mono text-sm font-bold">POST /api/app/login</code>
+                            <p class="mt-2 text-sm text-zinc-600">Valida email/senha e pode emitir uma nova chave para o dispositivo. Se o limite de 3 chaves estiver cheio, envie `revoke_oldest: true` para substituir a chave ativa mais antiga.</p>
+                        </article>
+                        <article class="rounded bg-zinc-100 p-4">
+                            <code class="font-mono text-sm font-bold">GET /api/app/me</code>
+                            <p class="mt-2 text-sm text-zinc-600">Retorna usuario, chave atual e limites. Requer `Authorization: Bearer sua_chave`.</p>
+                        </article>
+                        <article class="rounded bg-zinc-100 p-4">
+                            <code class="font-mono text-sm font-bold">GET/POST/DELETE /api/app/api-keys</code>
+                            <p class="mt-2 text-sm text-zinc-600">Lista, cria e revoga chaves do usuario autenticado. O token completo so aparece na criacao.</p>
+                        </article>
+                    </div>
+                </section>
+
                 <section id="auth" class="rounded border border-zinc-200 p-6">
                     <h2 class="text-2xl font-black">Autenticacao</h2>
                     <p class="mt-3 text-zinc-600">Todas as requisicoes em `/api/v1` exigem uma API key vinculada ao usuario. Para o usuario final, cadastro, login e acesso acontecem dentro do app FutAI; a API fica como camada de dados e controle de consumo.</p>

@@ -207,6 +207,109 @@ class FutiaDataHubTest extends TestCase
         $this->assertNotNull($token->fresh()->revoked_at);
     }
 
+    public function test_futai_app_can_register_login_and_consume_api(): void
+    {
+        $this->seed();
+
+        $registerResponse = $this->postJson('/api/app/register', [
+            'name' => 'FutAI User',
+            'email' => 'futai-user@test.dev',
+            'password' => 'strong-secret',
+            'password_confirmation' => 'strong-secret',
+            'api_key_name' => 'FutAI Desktop',
+        ])->assertCreated()
+            ->assertJsonPath('user.email', 'futai-user@test.dev')
+            ->assertJsonPath('api_key.name', 'FutAI Desktop')
+            ->assertJsonPath('limits.active_api_keys', 3)
+            ->assertJsonPath('limits.requests_per_minute', 10);
+
+        $plainTextToken = $registerResponse->json('api_key.token');
+        $this->assertIsString($plainTextToken);
+        $this->assertStringStartsWith('mf_live_', $plainTextToken);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/v1/metadata')
+            ->assertOk();
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->getJson('/api/app/me')
+            ->assertOk()
+            ->assertJsonPath('user.email', 'futai-user@test.dev')
+            ->assertJsonPath('current_api_key.name', 'FutAI Desktop')
+            ->assertJsonPath('current_api_key.token', null);
+
+        $loginResponse = $this->postJson('/api/app/login', [
+            'email' => 'futai-user@test.dev',
+            'password' => 'strong-secret',
+            'api_key_name' => 'FutAI Notebook',
+        ])->assertOk()
+            ->assertJsonPath('user.email', 'futai-user@test.dev')
+            ->assertJsonPath('api_key.name', 'FutAI Notebook');
+
+        $this->assertStringStartsWith('mf_live_', $loginResponse->json('api_key.token'));
+        $this->assertDatabaseCount('user_api_tokens', 2);
+    }
+
+    public function test_futai_app_can_manage_api_keys_and_enforces_free_limits(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+        [, $plainTextToken] = UserApiToken::issueFor($user, 'Primary');
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->postJson('/api/app/api-keys', ['name' => 'Second'])
+            ->assertCreated()
+            ->assertJsonPath('api_key.name', 'Second')
+            ->assertJsonPath('limits.active_api_keys', 3);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->postJson('/api/app/api-keys', ['name' => 'Third'])
+            ->assertCreated();
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->postJson('/api/app/api-keys', ['name' => 'Fourth'])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'api_key_limit_reached');
+
+        $tokenToRevoke = $user->apiTokens()->where('name', 'Second')->first();
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->deleteJson("/api/app/api-keys/{$tokenToRevoke->id}")
+            ->assertOk()
+            ->assertJsonPath('api_key.name', 'Second');
+
+        $this->assertNotNull($tokenToRevoke->fresh()->revoked_at);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            ->postJson('/api/app/api-keys', ['name' => 'Replacement'])
+            ->assertCreated();
+    }
+
+    public function test_futai_login_can_replace_oldest_api_key_when_limit_is_reached(): void
+    {
+        $user = User::factory()->create(['email' => 'limit@test.dev', 'password' => 'strong-secret', 'is_admin' => false]);
+
+        foreach (range(1, 3) as $index) {
+            UserApiToken::issueFor($user, 'Key '.$index);
+        }
+
+        $this->postJson('/api/app/login', [
+            'email' => 'limit@test.dev',
+            'password' => 'strong-secret',
+        ])->assertUnprocessable()
+            ->assertJsonPath('code', 'api_key_limit_reached');
+
+        $this->postJson('/api/app/login', [
+            'email' => 'limit@test.dev',
+            'password' => 'strong-secret',
+            'api_key_name' => 'New Device',
+            'revoke_oldest' => true,
+        ])->assertOk()
+            ->assertJsonPath('api_key.name', 'New Device');
+
+        $this->assertSame(3, $user->apiTokens()->whereNull('revoked_at')->count());
+        $this->assertNotNull($user->apiTokens()->where('name', 'Key 1')->first()->revoked_at);
+    }
+
     public function test_user_is_limited_to_three_active_api_keys(): void
     {
         $user = User::factory()->create(['is_admin' => false]);
@@ -309,6 +412,8 @@ class FutiaDataHubTest extends TestCase
         $this->get('/docs')
             ->assertOk()
             ->assertSee('Documentacao v1')
+            ->assertSee('Fluxo FutAI')
+            ->assertSee('/api/app/register')
             ->assertSee('/matches')
             ->assertSee('updated_since');
 
