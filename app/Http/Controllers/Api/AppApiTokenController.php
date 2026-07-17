@@ -40,7 +40,7 @@ class AppApiTokenController extends Controller
             ], 422);
         }
 
-        [$token, $plainTextToken] = UserApiToken::issueFor($request->user(), $data['name']);
+        [$token, $plainTextToken] = UserApiToken::issueFor($request->user(), $data['name'], $request->attributes->get('app_device'));
 
         return response()->json([
             'message' => 'API key criada com sucesso.',
@@ -73,6 +73,12 @@ class AppApiTokenController extends Controller
             'last_used_at' => $token->last_used_at?->toISOString(),
             'revoked_at' => $token->revoked_at?->toISOString(),
             'created_at' => $token->created_at?->toISOString(),
+            'device' => $token->appDevice ? [
+                'device_id' => $token->appDevice->device_id,
+                'name' => $token->appDevice->name,
+                'platform' => $token->appDevice->platform,
+                'app_version' => $token->appDevice->app_version,
+            ] : null,
         ];
     }
 

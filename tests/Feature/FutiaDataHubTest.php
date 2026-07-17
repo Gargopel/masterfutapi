@@ -107,8 +107,8 @@ class FutiaDataHubTest extends TestCase
         $this->seed();
 
         $this->getJson('/api/v1/sports')->assertUnauthorized();
-        $this->withHeaders($this->apiHeaders())->getJson('/api/v1/sports')->assertOk()->assertJsonFragment(['slug' => 'football']);
-        $this->withHeaders($this->apiHeaders())->getJson('/api/v1/leagues')->assertOk()->assertJsonFragment(['slug' => 'brasileirao-serie-a']);
+        $this->withHeaders($this->apiHeaders(path: '/api/v1/sports'))->getJson('/api/v1/sports')->assertOk()->assertJsonFragment(['slug' => 'football']);
+        $this->withHeaders($this->apiHeaders(path: '/api/v1/leagues'))->getJson('/api/v1/leagues')->assertOk()->assertJsonFragment(['slug' => 'brasileirao-serie-a']);
     }
 
     public function test_plan_can_limit_user_to_single_league_season(): void
@@ -126,21 +126,21 @@ class FutiaDataHubTest extends TestCase
         $plan = Plan::create(['name' => 'Free', 'slug' => 'free', 'is_default' => true, 'requests_per_minute' => 10, 'max_active_api_keys' => 3]);
         $plan->accessRules()->create(['scope_type' => 'season', 'season_id' => $season2026->id]);
         $user = User::factory()->create(['is_admin' => false, 'plan_id' => $plan->id]);
-        [, $plainTextToken] = UserApiToken::issueFor($user, 'FutAI');
+        [, $plainTextToken, $device, $privateKey] = $this->issueSignedDeviceToken($user, 'FutAI');
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/leagues'))
             ->getJson('/api/v1/leagues')
             ->assertOk()
             ->assertJsonFragment(['slug' => 'brasileiro-serie-a'])
             ->assertJsonMissing(['slug' => 'brasileiro-serie-b']);
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/seasons'))
             ->getJson('/api/v1/seasons')
             ->assertOk()
             ->assertJsonFragment(['year' => 2026])
             ->assertJsonMissing(['year' => 2025]);
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/matches'))
             ->getJson('/api/v1/matches')
             ->assertOk()
             ->assertJsonCount(1, 'data');
@@ -158,9 +158,9 @@ class FutiaDataHubTest extends TestCase
         $plan = Plan::create(['name' => 'Americas', 'slug' => 'americas', 'requests_per_minute' => 10, 'max_active_api_keys' => 3]);
         $plan->accessRules()->create(['scope_type' => 'region', 'region' => 'americas']);
         $user = User::factory()->create(['is_admin' => false, 'plan_id' => $plan->id]);
-        [, $plainTextToken] = UserApiToken::issueFor($user, 'FutAI');
+        [, $plainTextToken, $device, $privateKey] = $this->issueSignedDeviceToken($user, 'FutAI');
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/leagues'))
             ->getJson('/api/v1/leagues')
             ->assertOk()
             ->assertJsonFragment(['slug' => 'brasileiro'])
@@ -272,6 +272,7 @@ class FutiaDataHubTest extends TestCase
     public function test_futai_app_can_register_login_and_consume_api(): void
     {
         $this->seed();
+        [$privateKey, $publicKey] = $this->deviceKeyPair();
 
         $registerResponse = $this->postJson('/api/app/register', [
             'name' => 'FutAI User',
@@ -279,70 +280,88 @@ class FutiaDataHubTest extends TestCase
             'password' => 'strong-secret',
             'password_confirmation' => 'strong-secret',
             'api_key_name' => 'FutAI Desktop',
+            'device_name' => 'Desktop principal',
+            'platform' => 'windows',
+            'app_version' => '1.0.0',
+            'public_key' => $publicKey,
         ])->assertCreated()
             ->assertJsonPath('user.email', 'futai-user@test.dev')
+            ->assertJsonPath('device.name', 'Desktop principal')
             ->assertJsonPath('api_key.name', 'FutAI Desktop')
             ->assertJsonPath('limits.active_api_keys', 3)
             ->assertJsonPath('limits.requests_per_minute', 10);
 
         $plainTextToken = $registerResponse->json('api_key.token');
+        $device = \App\Models\AppDevice::where('device_id', $registerResponse->json('device.device_id'))->firstOrFail();
         $this->assertIsString($plainTextToken);
         $this->assertStringStartsWith('mf_live_', $plainTextToken);
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/metadata'))
             ->getJson('/api/v1/metadata')
             ->assertOk();
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/app/me'))
             ->getJson('/api/app/me')
             ->assertOk()
             ->assertJsonPath('user.email', 'futai-user@test.dev')
+            ->assertJsonPath('device.name', 'Desktop principal')
             ->assertJsonPath('current_api_key.name', 'FutAI Desktop')
             ->assertJsonPath('current_api_key.token', null);
 
+        [, $secondPublicKey] = $this->deviceKeyPair();
         $loginResponse = $this->postJson('/api/app/login', [
             'email' => 'futai-user@test.dev',
             'password' => 'strong-secret',
             'api_key_name' => 'FutAI Notebook',
+            'device_name' => 'Notebook',
+            'platform' => 'linux',
+            'app_version' => '1.0.0',
+            'public_key' => $secondPublicKey,
         ])->assertOk()
             ->assertJsonPath('user.email', 'futai-user@test.dev')
+            ->assertJsonPath('device.name', 'Notebook')
             ->assertJsonPath('api_key.name', 'FutAI Notebook');
 
         $this->assertStringStartsWith('mf_live_', $loginResponse->json('api_key.token'));
         $this->assertDatabaseCount('user_api_tokens', 2);
+        $this->assertDatabaseCount('app_devices', 2);
     }
 
     public function test_futai_app_can_manage_api_keys_and_enforces_free_limits(): void
     {
         $user = User::factory()->create(['is_admin' => false]);
-        [, $plainTextToken] = UserApiToken::issueFor($user, 'Primary');
+        [, $plainTextToken, $device, $privateKey] = $this->issueSignedDeviceToken($user, 'Primary');
+        $secondPayload = ['name' => 'Second'];
+        $thirdPayload = ['name' => 'Third'];
+        $fourthPayload = ['name' => 'Fourth'];
+        $replacementPayload = ['name' => 'Replacement'];
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
-            ->postJson('/api/app/api-keys', ['name' => 'Second'])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'POST', '/api/app/api-keys', json_encode($secondPayload)))
+            ->postJson('/api/app/api-keys', $secondPayload)
             ->assertCreated()
             ->assertJsonPath('api_key.name', 'Second')
             ->assertJsonPath('limits.active_api_keys', 3);
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
-            ->postJson('/api/app/api-keys', ['name' => 'Third'])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'POST', '/api/app/api-keys', json_encode($thirdPayload)))
+            ->postJson('/api/app/api-keys', $thirdPayload)
             ->assertCreated();
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
-            ->postJson('/api/app/api-keys', ['name' => 'Fourth'])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'POST', '/api/app/api-keys', json_encode($fourthPayload)))
+            ->postJson('/api/app/api-keys', $fourthPayload)
             ->assertUnprocessable()
             ->assertJsonPath('code', 'api_key_limit_reached');
 
         $tokenToRevoke = $user->apiTokens()->where('name', 'Second')->first();
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'DELETE', "/api/app/api-keys/{$tokenToRevoke->id}"))
             ->deleteJson("/api/app/api-keys/{$tokenToRevoke->id}")
             ->assertOk()
             ->assertJsonPath('api_key.name', 'Second');
 
         $this->assertNotNull($tokenToRevoke->fresh()->revoked_at);
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
-            ->postJson('/api/app/api-keys', ['name' => 'Replacement'])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'POST', '/api/app/api-keys', json_encode($replacementPayload)))
+            ->postJson('/api/app/api-keys', $replacementPayload)
             ->assertCreated();
     }
 
@@ -357,14 +376,20 @@ class FutiaDataHubTest extends TestCase
         $this->postJson('/api/app/login', [
             'email' => 'limit@test.dev',
             'password' => 'strong-secret',
+            'device_name' => 'Blocked device',
+            'public_key' => $this->deviceKeyPair()[1],
         ])->assertUnprocessable()
             ->assertJsonPath('code', 'api_key_limit_reached');
 
+        [, $publicKey] = $this->deviceKeyPair();
         $this->postJson('/api/app/login', [
             'email' => 'limit@test.dev',
             'password' => 'strong-secret',
             'api_key_name' => 'New Device',
             'revoke_oldest' => true,
+            'device_name' => 'New Device',
+            'platform' => 'macos',
+            'public_key' => $publicKey,
         ])->assertOk()
             ->assertJsonPath('api_key.name', 'New Device');
 
@@ -399,15 +424,15 @@ class FutiaDataHubTest extends TestCase
     {
         $this->seed();
         $user = User::factory()->create(['is_admin' => false]);
-        [$token, $plainTextToken] = UserApiToken::issueFor($user, 'Revoked key');
+        [$token, $plainTextToken, $device, $privateKey] = $this->issueSignedDeviceToken($user, 'Revoked key');
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/metadata'))
             ->getJson('/api/v1/metadata')
             ->assertOk();
 
         $token->update(['revoked_at' => now()]);
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/metadata'))
             ->getJson('/api/v1/metadata')
             ->assertUnauthorized();
     }
@@ -417,17 +442,17 @@ class FutiaDataHubTest extends TestCase
         $this->seed();
         $user = User::factory()->create(['is_admin' => false]);
         RateLimiter::clear('masterfut:user:'.$user->id);
-        [, $firstToken] = UserApiToken::issueFor($user, 'First key');
-        [, $secondToken] = UserApiToken::issueFor($user, 'Second key');
+        [, $firstToken, $firstDevice, $firstPrivateKey] = $this->issueSignedDeviceToken($user, 'First key');
+        [, $secondToken, $secondDevice, $secondPrivateKey] = $this->issueSignedDeviceToken($user, 'Second key');
 
         for ($attempt = 1; $attempt <= 10; $attempt++) {
-            $plainTextToken = $attempt % 2 === 0 ? $firstToken : $secondToken;
-            $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+            [$plainTextToken, $device, $privateKey] = $attempt % 2 === 0 ? [$firstToken, $firstDevice, $firstPrivateKey] : [$secondToken, $secondDevice, $secondPrivateKey];
+            $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/metadata'))
                 ->getJson('/api/v1/metadata')
                 ->assertOk();
         }
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$firstToken])
+        $this->withHeaders($this->signedApiHeaders($firstToken, $firstDevice, $firstPrivateKey, 'GET', '/api/v1/metadata'))
             ->getJson('/api/v1/metadata')
             ->assertTooManyRequests()
             ->assertJsonPath('message', 'Limite de 10 requisicoes por minuto atingido.');
@@ -438,9 +463,9 @@ class FutiaDataHubTest extends TestCase
         $this->seed();
         $admin = User::where('is_admin', true)->first();
         $user = User::factory()->create(['name' => 'Client User', 'email' => 'client@test.dev', 'is_admin' => false]);
-        [$token, $plainTextToken] = UserApiToken::issueFor($user, 'Client production');
+        [$token, $plainTextToken, $device, $privateKey] = $this->issueSignedDeviceToken($user, 'Client production');
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$plainTextToken])
+        $this->withHeaders($this->signedApiHeaders($plainTextToken, $device, $privateKey, 'GET', '/api/v1/metadata'))
             ->getJson('/api/v1/metadata')
             ->assertOk();
 

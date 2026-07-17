@@ -14,6 +14,7 @@ class UserApiToken extends Model
 
     protected $fillable = [
         'user_id',
+        'app_device_id',
         'name',
         'token_hash',
         'token_prefix',
@@ -26,12 +27,13 @@ class UserApiToken extends Model
         'revoked_at' => 'datetime',
     ];
 
-    public static function issueFor(User $user, string $name): array
+    public static function issueFor(User $user, string $name, ?AppDevice $device = null): array
     {
         $plainTextToken = 'mf_live_'.Str::random(48);
 
         $token = static::create([
             'user_id' => $user->id,
+            'app_device_id' => $device?->id,
             'name' => $name,
             'token_hash' => static::hashToken($plainTextToken),
             'token_prefix' => substr($plainTextToken, 0, 16),
@@ -48,6 +50,11 @@ class UserApiToken extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function appDevice(): BelongsTo
+    {
+        return $this->belongsTo(AppDevice::class);
     }
 
     public function isActive(): bool

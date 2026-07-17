@@ -167,7 +167,8 @@ class ProviderSyncTest extends TestCase
             'starts_at' => '2024-06-01 12:00:00',
             'status' => 'finished',
         ]);
-        $this->withHeaders($this->apiHeaders())->getJson('/api/v1/matches?league_id='.$league->id.'&status=finished&date_from=2024-01-01&date_to=2024-12-31')
+        $path = '/api/v1/matches?league_id='.$league->id.'&status=finished&date_from=2024-01-01&date_to=2024-12-31';
+        $this->withHeaders($this->apiHeaders(path: $path))->getJson($path)
             ->assertOk()
             ->assertJsonFragment(['id' => $match->id])
             ->assertJsonMissingPath('data.0.provider')

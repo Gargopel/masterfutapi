@@ -148,7 +148,7 @@ class ObservabilityTest extends TestCase
 
         $this->actingAs($admin)->getJson('/admin/api/data-coverage')->assertOk()->assertJsonPath('summary.matches', 1);
         $this->actingAs($admin)->getJson('/admin/api/providers/health')->assertOk()->assertJsonPath('0.requests_today', 1);
-        $this->withHeaders($this->apiHeaders())->getJson('/api/v1/metadata')->assertOk()->assertJsonPath('api_version', 'v1')->assertJsonPath('supported_languages.0', 'pt-BR');
+        $this->withHeaders($this->apiHeaders(path: '/api/v1/metadata'))->getJson('/api/v1/metadata')->assertOk()->assertJsonPath('api_version', 'v1')->assertJsonPath('supported_languages.0', 'pt-BR');
     }
 
     public function test_frontend_contains_new_translation_keys(): void
@@ -204,7 +204,7 @@ class ObservabilityTest extends TestCase
         $this->actingAs($admin)->get('/admin/api/sync-jobs/export')->assertOk();
         $this->actingAs($admin)->get("/admin/api/sync-jobs/{$job->id}/items/export")->assertOk();
 
-        $this->withHeaders($this->apiHeaders())->getJson('/api/v1/leagues?updated_since=2000-01-01T00:00:00')->assertOk()->assertJsonFragment(['current_page' => 1]);
+        $this->withHeaders($this->apiHeaders(path: '/api/v1/leagues?updated_since=2000-01-01T00:00:00'))->getJson('/api/v1/leagues?updated_since=2000-01-01T00:00:00')->assertOk()->assertJsonFragment(['current_page' => 1]);
     }
 
     public function test_cancel_preserves_processed_items_and_alerts_can_be_resolved(): void

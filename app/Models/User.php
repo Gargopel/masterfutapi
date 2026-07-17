@@ -56,6 +56,11 @@ class User extends Authenticatable
         return $this->hasMany(UserApiToken::class);
     }
 
+    public function appDevices(): HasMany
+    {
+        return $this->hasMany(AppDevice::class);
+    }
+
     public function apiRequestLogs(): HasMany
     {
         return $this->hasMany(UserApiRequestLog::class);
